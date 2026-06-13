@@ -43,15 +43,51 @@ Env: `PORT`, `HOST`, `PUPPTYEER_BIN` (defaults to the sibling
 ```python
 from claude_pty_harness import ClaudeHarness
 
-harness = await ClaudeHarness.create(pupptyeer_bin="/path/to/pupptyeer")
+harness = await ClaudeHarness.create(
+    pupptyeer_bin="/path/to/pupptyeer",
+    allowed_roots=["/home/me/dev"],  # optional: reject create_session outside these
+)
 remove = harness.add_listener(lambda kind, sid, payload: ...)  # "chat" | "status"
 summary = await harness.create_session(cwd="/repo", model="sonnet")
-await harness.send_prompt(summary["id"], "hello")
+await harness.send_prompt(summary["id"], "first line\nsecond line")  # multi-line, one paste
 # also: harness.list(), harness.get(id), harness.transcript(id),
 #       harness.interrupt(id), await harness.kill(id)
 ```
 
 `create_session` also takes `command`, `permission_mode`, and `extra_args`.
+`send_prompt` delivers the text as a bracketed paste so multi-line input lands in
+the TUI intact, then submits with one Enter (pass `submit=False` to stage it).
+
+## Mounting into your own FastAPI app (with auth)
+
+`include_harness_routes` mounts the same REST + WS endpoints onto an existing
+app, so the harness can sit behind your app's auth instead of running open on
+localhost. REST routes accept FastAPI `dependencies`; the WebSocket is guarded
+separately (browsers can't set an `Authorization` header on a WS).
+
+```python
+from fastapi import Depends, WebSocket
+from claude_pty_harness import ClaudeHarness
+from claude_pty_harness.server import include_harness_routes
+
+harness = await ClaudeHarness.create(allowed_roots=["/home/me/dev"])
+
+async def authenticate_ws(ws: WebSocket) -> bool:
+    return await verify_ticket(ws.query_params.get("ticket"))  # your check
+
+include_harness_routes(
+    app,
+    harness,                                 # or a zero-arg callable returning one
+    prefix="/api/chat",
+    dependencies=[Depends(validate_token)],  # guards the REST routes
+    authenticate_ws=authenticate_ws,         # guards the WS upgrade
+)
+```
+
+`/health` is left unauthenticated for liveness probes. Keep the harness itself
+bound to localhost / a private interface and let your app be the only
+authenticated front door; never expose it directly. `create_router(...)` returns
+the `APIRouter` if you'd rather include it yourself.
 
 ## Requires
 

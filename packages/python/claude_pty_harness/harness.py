@@ -5,10 +5,21 @@ request/reply calls run in a thread executor so they never block the loop."""
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, List, Optional
+
+# Bracketed-paste markers. Wrapping prompt text in these makes the TUI insert it
+# literally (newlines and all) instead of submitting at the first newline, the
+# same way a real terminal delivers a paste. A separate Enter then submits.
+_PASTE_START = b"\x1b[200~"
+_PASTE_END = b"\x1b[201~"
+
+
+def _normalize_root(path: str) -> str:
+    return os.path.abspath(os.path.expanduser(path))
 
 from . import detect
 from ._pupptyeer import PupptyeerClient
@@ -35,9 +46,17 @@ class _Session:
 
 
 class ClaudeHarness:
-    def __init__(self, client: PupptyeerClient, readiness: str = "screen"):
+    def __init__(
+        self,
+        client: PupptyeerClient,
+        readiness: str = "screen",
+        allowed_roots: Optional[List[str]] = None,
+    ):
         self._client = client
         self._readiness = readiness
+        # When non-empty, sessions may only be spawned inside one of these roots.
+        # Empty means unrestricted (back-compat). Normalized once here.
+        self._allowed_roots = [_normalize_root(r) for r in (allowed_roots or [])]
         self._sessions: dict[str, _Session] = {}
         self._listeners: List[Listener] = []
 
@@ -48,9 +67,21 @@ class ClaudeHarness:
         pupptyeer_bin: Optional[str] = None,
         socket_path: Optional[str] = None,
         readiness: str = "screen",
+        allowed_roots: Optional[List[str]] = None,
     ) -> "ClaudeHarness":
         client = await connect_daemon(DaemonOptions(socket_path=socket_path, pupptyeer_bin=pupptyeer_bin))
-        return cls(client, readiness=readiness)
+        return cls(client, readiness=readiness, allowed_roots=allowed_roots)
+
+    def _check_cwd(self, cwd: str) -> str:
+        """Resolve cwd and, if an allowlist is configured, reject anything that
+        escapes it. Returns the normalized path actually handed to claude."""
+        resolved = _normalize_root(cwd)
+        if not self._allowed_roots:
+            return resolved
+        for root in self._allowed_roots:
+            if resolved == root or resolved.startswith(root + os.sep):
+                return resolved
+        raise PermissionError(f"cwd {resolved!r} is outside the allowed roots")
 
     # --- pub/sub ----------------------------------------------------------
 
@@ -108,6 +139,7 @@ class ClaudeHarness:
         cols: int = 120,
         rows: int = 40,
     ) -> SessionSummary:
+        cwd = self._check_cwd(cwd)
         session_id = str(uuid.uuid4())
         args: List[str] = ["--session-id", session_id]
         if permission_mode:
@@ -212,14 +244,20 @@ class ClaudeHarness:
 
     # --- input ------------------------------------------------------------
 
-    async def send_prompt(self, session_id: str, text: str) -> None:
+    async def send_prompt(self, session_id: str, text: str, submit: bool = True) -> None:
+        """Deliver a prompt as a bracketed paste so multi-line text lands in the
+        TUI input intact, then (by default) submit it with a single Enter. Pass
+        submit=False to stage the text without sending."""
         s = self._sessions.get(session_id)
         if not s:
             raise KeyError(session_id)
-        one_line = " ".join(text.splitlines())  # newlines would submit early
-        self._client.write_pane(s.pty_id, one_line)
-        await asyncio.sleep(0.15)
-        self._client.write_pane(s.pty_id, "\r")
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        # Inside a paste the TUI treats CR as a literal newline, not a submit.
+        paste = _PASTE_START + normalized.replace("\n", "\r").encode() + _PASTE_END
+        self._client.write_pane(s.pty_id, paste)
+        if submit:
+            await asyncio.sleep(0.12)
+            self._client.write_pane(s.pty_id, "\r")
 
     def interrupt(self, session_id: str) -> None:
         s = self._sessions.get(session_id)

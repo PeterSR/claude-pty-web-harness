@@ -2,7 +2,7 @@
 
 Drive the interactive **Claude Code** TUI inside a pseudo-terminal and stream its
 transcript into a chat UI. It launches `claude` via
-[pupptyeer](../pupptyeer), tails the JSONL transcript Claude persists, and
+[pupptyeer](https://github.com/PeterSR/pupptyeer), tails the JSONL transcript Claude persists, and
 renders it as chat while the input box drives the same pty.
 
 ```
@@ -60,19 +60,30 @@ Sessions launch with `--permission-mode bypassPermissions` by default.
 ```ts
 import { ClaudeHarness } from "@claude-pty-harness/core";
 
-const harness = await ClaudeHarness.create({ pupptyeerBin: "/path/to/pupptyeer" });
+const harness = await ClaudeHarness.create({
+  pupptyeerBin: "/path/to/pupptyeer",
+  allowedRoots: ["/home/me/dev"], // optional: reject createSession outside these
+});
 harness.on("chat", (sessionId, event) => send(sessionId, event));   // event: ChatEvent
 harness.on("status", (sessionId, status) => send(sessionId, status));
 
 const { id } = await harness.createSession({ cwd, model: "sonnet" });
-await harness.sendPrompt(id, "hello");
+await harness.sendPrompt(id, "first line\nsecond line"); // multi-line, sent as one paste
 // also: harness.list(), harness.transcript(id), harness.interrupt(id), harness.kill(id)
 ```
 
 `createSession` also takes `command`, `permissionMode`, and `extraArgs` if you
 want to drive something other than `claude --permission-mode bypassPermissions`.
+`sendPrompt` delivers the text as a bracketed paste so multi-line input lands in
+the TUI intact, then submits with one Enter (pass `{ submit: false }` to stage
+without sending).
+
 To embed the reference HTTP/WS API on your own Fastify app:
-`registerHarnessRoutes(app, harness, { prefix: "/api" })`.
+`registerHarnessRoutes(app, harness, { prefix: "/api" })`. It accepts auth hooks
+so you can put it behind your app's auth — `authenticate(req)` guards the REST
+routes (401 on false) and `authenticateWs(req)` guards the WebSocket upgrade
+(browsers can't send an `Authorization` header on a WS, so validate a
+short-lived ticket / query token there). `/health` stays open.
 
 **Frontend** (bring your own components):
 

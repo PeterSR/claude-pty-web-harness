@@ -2,7 +2,7 @@
 // the harness REST + WebSocket endpoints onto any Fastify instance, so you can
 // embed it in an existing app instead of running the bundled server.
 import websocket from "@fastify/websocket";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ClaudeHarness } from "@claude-pty-harness/core";
 import type { ChatEvent, ClientMessage, ServerMessage, SessionStatus } from "@claude-pty-harness/protocol";
 
@@ -20,6 +20,18 @@ interface WebSocket {
 export interface HarnessRouteOptions {
   /** Path prefix for the routes. Default "/api". */
   prefix?: string;
+  /**
+   * Guard for the REST routes (everything except /health). Return false to
+   * reject with 401. Runs as a Fastify preHandler, so you can also throw your
+   * own reply. Omit for no auth (default).
+   */
+  authenticate?: (req: FastifyRequest) => boolean | Promise<boolean>;
+  /**
+   * Guard for the WebSocket upgrade. Browsers can't set an Authorization header
+   * on a WebSocket, so validate a short-lived ticket / query token here. Return
+   * false to reject the connection. Omit for no auth (default).
+   */
+  authenticateWs?: (req: FastifyRequest) => boolean | Promise<boolean>;
 }
 
 /**
@@ -40,6 +52,18 @@ export async function registerHarnessRoutes(
   const prefix = opts.prefix ?? "/api";
   await app.register(websocket);
 
+  // REST guard as a preHandler; only attached when an authenticator is given so
+  // the unauthenticated default path stays untouched. /health is left open.
+  const restGuard = opts.authenticate
+    ? async (req: FastifyRequest, reply: FastifyReply) => {
+        if (!(await opts.authenticate!(req))) {
+          reply.code(401);
+          return reply.send({ error: "unauthorized" });
+        }
+      }
+    : undefined;
+  const guarded = restGuard ? { preHandler: restGuard } : {};
+
   // Per-session set of connected WebSocket clients.
   const subscribers = new Map<string, Set<WebSocket>>();
 
@@ -57,9 +81,9 @@ export async function registerHarnessRoutes(
 
   app.get(`${prefix}/health`, async () => ({ ok: true }));
 
-  app.get(`${prefix}/sessions`, async () => harness.list());
+  app.get(`${prefix}/sessions`, guarded, async () => harness.list());
 
-  app.post(`${prefix}/sessions`, async (req, reply) => {
+  app.post(`${prefix}/sessions`, guarded, async (req, reply) => {
     const body = (req.body ?? {}) as { cwd?: string; model?: string };
     const cwd = body.cwd?.trim();
     if (!cwd) {
@@ -75,7 +99,7 @@ export async function registerHarnessRoutes(
     }
   });
 
-  app.get(`${prefix}/sessions/:id`, async (req, reply) => {
+  app.get(`${prefix}/sessions/:id`, guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const session = harness.get(id);
     if (!session) {
@@ -85,13 +109,13 @@ export async function registerHarnessRoutes(
     return session;
   });
 
-  app.delete(`${prefix}/sessions/:id`, async (req) => {
+  app.delete(`${prefix}/sessions/:id`, guarded, async (req) => {
     const { id } = req.params as { id: string };
     await harness.kill(id);
     return { ok: true };
   });
 
-  app.post(`${prefix}/sessions/:id/prompt`, async (req, reply) => {
+  app.post(`${prefix}/sessions/:id/prompt`, guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { text?: string };
     if (!body.text) {
@@ -107,7 +131,12 @@ export async function registerHarnessRoutes(
     }
   });
 
-  app.get(`${prefix}/sessions/:id/stream`, { websocket: true }, (socket: WebSocket, req) => {
+  app.get(`${prefix}/sessions/:id/stream`, { websocket: true }, async (socket: WebSocket, req) => {
+    if (opts.authenticateWs && !(await opts.authenticateWs(req))) {
+      socket.send(JSON.stringify({ type: "error", message: "unauthorized" } satisfies ServerMessage));
+      socket.close();
+      return;
+    }
     const { id } = req.params as { id: string };
     const session = harness.get(id);
     if (!session) {

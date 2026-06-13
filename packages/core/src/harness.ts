@@ -2,6 +2,7 @@
 // pty and turns its JSONL transcript into a stream of ChatEvents.
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { resolve as resolvePath, sep } from "node:path";
 import { PupptyeerClient } from "@petersr/pupptyeer-client";
 import { connectDaemon } from "./daemon.js";
 import { JsonlTailer } from "./jsonl.js";
@@ -10,6 +11,12 @@ import type { DaemonOptions } from "./daemon.js";
 import type { ChatEvent, SessionStatus, SessionSummary } from "@claude-pty-harness/protocol";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Bracketed-paste markers. Wrapping prompt text in these makes the TUI insert it
+// literally (newlines and all) instead of submitting at the first newline, the
+// same way a real terminal delivers a paste. A separate Enter then submits.
+const PASTE_START = "\x1b[200~";
+const PASTE_END = "\x1b[201~";
 
 export interface HarnessOptions extends DaemonOptions {
   /**
@@ -21,6 +28,13 @@ export interface HarnessOptions extends DaemonOptions {
    *    capture wedges claude sessions (see pupptyeer 0.2.0 capture bug).
    */
   readiness?: "screen" | "delay";
+  /**
+   * If set and non-empty, sessions may only be spawned inside one of these
+   * roots; a cwd that resolves outside them is rejected. Leave unset for the
+   * default (unrestricted) behaviour. Useful when the harness sits behind an
+   * authenticated app and you don't want a caller spawning claude at "/".
+   */
+  allowedRoots?: string[];
 }
 
 export interface CreateSessionOptions {
@@ -56,13 +70,28 @@ interface Session {
 export class ClaudeHarness extends EventEmitter {
   private client!: PupptyeerClient;
   private readiness: "screen" | "delay" = "screen";
+  private allowedRoots: string[] = [];
   private readonly sessions = new Map<string, Session>();
 
   static async create(opts: HarnessOptions = {}): Promise<ClaudeHarness> {
     const h = new ClaudeHarness();
     h.readiness = opts.readiness ?? "screen";
+    h.allowedRoots = (opts.allowedRoots ?? []).map((r) => resolvePath(r));
     h.client = await connectDaemon(opts);
     return h;
+  }
+
+  /**
+   * Resolve cwd and, if an allowlist is configured, reject anything that escapes
+   * it. Returns the normalized path actually handed to claude.
+   */
+  private checkCwd(cwd: string): string {
+    const resolved = resolvePath(cwd);
+    if (this.allowedRoots.length === 0) return resolved;
+    for (const root of this.allowedRoots) {
+      if (resolved === root || resolved.startsWith(root + sep)) return resolved;
+    }
+    throw new Error(`cwd ${resolved} is outside the allowed roots`);
   }
 
   list(): SessionSummary[] {
@@ -84,6 +113,7 @@ export class ClaudeHarness extends EventEmitter {
   }
 
   async createSession(opts: CreateSessionOptions): Promise<SessionSummary> {
+    const cwd = this.checkCwd(opts.cwd);
     const id = randomUUID();
     const cols = opts.cols ?? 120;
     const rows = opts.rows ?? 40;
@@ -99,7 +129,7 @@ export class ClaudeHarness extends EventEmitter {
     const ptyId = await this.client.newSession({
       command,
       args,
-      cwd: opts.cwd,
+      cwd,
       cols,
       rows,
     });
@@ -108,7 +138,7 @@ export class ClaudeHarness extends EventEmitter {
     const session: Session = {
       id,
       ptyId,
-      cwd: opts.cwd,
+      cwd,
       model: opts.model,
       status: "starting",
       createdAt: new Date().toISOString(),
@@ -215,15 +245,21 @@ export class ClaudeHarness extends EventEmitter {
     this.emit("status", session.id, "ready");
   }
 
-  /** Type a prompt into the pty (text, brief pause, Enter) like the TUI expects. */
-  async sendPrompt(id: string, text: string): Promise<void> {
+  /**
+   * Deliver a prompt as a bracketed paste so multi-line text lands in the TUI
+   * input intact, then (by default) submit it with a single Enter. Pass
+   * `{ submit: false }` to stage the text without sending.
+   */
+  async sendPrompt(id: string, text: string, opts: { submit?: boolean } = {}): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) throw new Error(`unknown session ${id}`);
-    // Single-line submit: newlines would submit early in the TUI.
-    const oneLine = text.replace(/\r?\n/g, " ");
-    this.client.writePane(session.ptyId, oneLine);
-    await sleep(150);
-    this.client.writePane(session.ptyId, "\r");
+    // Inside a paste the TUI treats CR as a literal newline, not a submit.
+    const body = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\r");
+    this.client.writePane(session.ptyId, `${PASTE_START}${body}${PASTE_END}`);
+    if (opts.submit ?? true) {
+      await sleep(120);
+      this.client.writePane(session.ptyId, "\r");
+    }
   }
 
   /** Send Ctrl-C (interrupt the current turn). */
