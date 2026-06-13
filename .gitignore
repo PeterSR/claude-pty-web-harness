@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Builds / bundler output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+**/.vite/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs / env / OS
+*.log
+.env
+.env.*
+.DS_Store
+
+# Editor
+.idea/
+.vscode/

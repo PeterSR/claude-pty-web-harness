@@ -1,0 +1,25 @@
+{
+  "name": "@claude-pty-harness/react",
+  "version": "0.0.1",
+  "description": "Headless React hook + client for a claude-pty-harness server. No UI, no styling.",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "dependencies": {
+    "@claude-pty-harness/protocol": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "react": "^18.3.1",
+    "typescript": "^5.7.2"
+  },
+  "license": "MIT"
+}

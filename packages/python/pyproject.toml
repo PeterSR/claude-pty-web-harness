@@ -1,0 +1,19 @@
+[project]
+name = "claude-pty-harness"
+version = "0.0.1"
+description = "Python backend parity for claude-pty-harness: drive Claude Code in a pupptyeer pty and stream its JSONL transcript over the same HTTP/WS protocol as the TS server."
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.scripts]
+claude-pty-harness-server = "claude_pty_harness.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["claude_pty_harness"]

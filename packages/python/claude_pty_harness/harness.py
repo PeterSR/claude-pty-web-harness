@@ -1,0 +1,241 @@
+"""ClaudeHarness: the transport-agnostic core. Drives Claude Code inside a
+pupptyeer pty and turns its JSONL transcript into a stream of ChatEvents.
+Async (asyncio) port of harness.ts; the synchronous pupptyeer client's
+request/reply calls run in a thread executor so they never block the loop."""
+from __future__ import annotations
+
+import asyncio
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Callable, List, Optional
+
+from . import detect
+from ._pupptyeer import PupptyeerClient
+from .daemon import DaemonOptions, connect_daemon
+from .jsonl import JsonlTailer
+from .protocol import ChatEvent, SessionStatus, SessionSummary
+
+# Listener(kind, session_id, payload): kind is "chat" (payload=ChatEvent) or
+# "status" (payload=SessionStatus).
+Listener = Callable[[str, str, Any], None]
+
+
+@dataclass
+class _Session:
+    id: str
+    pty_id: str
+    cwd: str
+    model: Optional[str]
+    status: SessionStatus
+    created_at: str
+    events: List[ChatEvent] = field(default_factory=list)
+    ready: bool = False
+    tasks: List[asyncio.Task] = field(default_factory=list)
+
+
+class ClaudeHarness:
+    def __init__(self, client: PupptyeerClient, readiness: str = "screen"):
+        self._client = client
+        self._readiness = readiness
+        self._sessions: dict[str, _Session] = {}
+        self._listeners: List[Listener] = []
+
+    @classmethod
+    async def create(
+        cls,
+        *,
+        pupptyeer_bin: Optional[str] = None,
+        socket_path: Optional[str] = None,
+        readiness: str = "screen",
+    ) -> "ClaudeHarness":
+        client = await connect_daemon(DaemonOptions(socket_path=socket_path, pupptyeer_bin=pupptyeer_bin))
+        return cls(client, readiness=readiness)
+
+    # --- pub/sub ----------------------------------------------------------
+
+    def add_listener(self, fn: Listener) -> Callable[[], None]:
+        self._listeners.append(fn)
+
+        def remove() -> None:
+            try:
+                self._listeners.remove(fn)
+            except ValueError:
+                pass
+
+        return remove
+
+    def _emit(self, kind: str, session_id: str, payload: Any) -> None:
+        for fn in list(self._listeners):
+            try:
+                fn(kind, session_id, payload)
+            except Exception:
+                pass
+
+    # --- queries ----------------------------------------------------------
+
+    def list(self) -> List[SessionSummary]:
+        return [self._summary(s) for s in self._sessions.values()]
+
+    def get(self, session_id: str) -> Optional[SessionSummary]:
+        s = self._sessions.get(session_id)
+        return self._summary(s) if s else None
+
+    def transcript(self, session_id: str) -> List[ChatEvent]:
+        s = self._sessions.get(session_id)
+        return s.events if s else []
+
+    def _summary(self, s: _Session) -> SessionSummary:
+        return {
+            "id": s.id,
+            "ptyId": s.pty_id,
+            "cwd": s.cwd,
+            "model": s.model,
+            "status": s.status,
+            "createdAt": s.created_at,
+        }
+
+    # --- lifecycle --------------------------------------------------------
+
+    async def create_session(
+        self,
+        *,
+        cwd: str,
+        command: str = "claude",
+        model: Optional[str] = None,
+        permission_mode: str = "bypassPermissions",
+        extra_args: Optional[List[str]] = None,
+        cols: int = 120,
+        rows: int = 40,
+    ) -> SessionSummary:
+        session_id = str(uuid.uuid4())
+        args: List[str] = ["--session-id", session_id]
+        if permission_mode:
+            args += ["--permission-mode", permission_mode]
+        if model:
+            args += ["--model", model]
+        if extra_args:
+            args += list(extra_args)
+
+        pty_id = await asyncio.to_thread(self._client.new_session, command, args, cwd, None, cols, rows)
+
+        s = _Session(
+            id=session_id,
+            pty_id=pty_id,
+            cwd=cwd,
+            model=model,
+            status="starting",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        self._sessions[session_id] = s
+
+        tailer = JsonlTailer(session_id, on_event=lambda ev: self._on_chat(session_id, ev))
+        s.tasks.append(asyncio.create_task(tailer.run()))
+        s.tasks.append(asyncio.create_task(self._drive_startup(s)))
+        return self._summary(s)
+
+    def _on_chat(self, session_id: str, ev: ChatEvent) -> None:
+        s = self._sessions.get(session_id)
+        if not s:
+            return
+        s.events.append(ev)
+        self._emit("chat", session_id, ev)
+
+    # --- startup / readiness ---------------------------------------------
+
+    async def _capture_lines(self, pty_id: str, settle_ms: int, timeout_ms: int) -> Optional[List[str]]:
+        """captureScreen with a hard timeout; returns the grid lines or None so
+        a misbehaving daemon can't wedge the startup driver."""
+        try:
+            screen = await asyncio.wait_for(
+                asyncio.to_thread(self._client.capture_screen, pty_id, settle_ms, timeout_ms),
+                timeout=timeout_ms / 1000 + 2,
+            )
+            return screen.lines
+        except Exception:
+            return None
+
+    async def _drive_startup(self, s: _Session) -> None:
+        # "delay": don't capture (a fallback for daemons without working
+        # capture). Give claude a moment to boot past its remembered modals.
+        if self._readiness == "delay":
+            await asyncio.sleep(3)
+            if s.id in self._sessions:
+                self._mark_ready(s)
+            return
+
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + 30
+        bypass_accepted = False
+        trust_handled = False
+
+        while loop.time() < deadline:
+            if s.id not in self._sessions or s.ready:
+                return
+            lines = await self._capture_lines(s.pty_id, 300, 1500)
+            if not lines:
+                await asyncio.sleep(0.2)
+                continue
+            text = "\n".join(lines).lower()
+
+            # 1. Bypass-permissions warning. Cursor defaults to "1. No, exit"; a
+            #    bare Enter would quit claude. Move to "2. Yes, I accept" (Down)
+            #    then confirm.
+            if not bypass_accepted and detect.has_bypass_warning(text):
+                bypass_accepted = True
+                self._client.write_pane(s.pty_id, b"\x1b[B")  # Down
+                await asyncio.sleep(0.25)
+                self._client.write_pane(s.pty_id, "\r")
+                await asyncio.sleep(0.4)
+                continue
+
+            # 2. "Do you trust the files in this folder?" modal (default = yes).
+            if not trust_handled and detect.has_trust_modal(text):
+                trust_handled = True
+                self._client.write_pane(s.pty_id, "\r")
+                await asyncio.sleep(0.4)
+                continue
+
+            # 3. Ready once the input prompt or idle footer is on screen.
+            if detect.has_input_prompt(lines) or detect.is_ready_footer(text):
+                self._mark_ready(s)
+                return
+
+            await asyncio.sleep(0.2)
+
+    def _mark_ready(self, s: _Session) -> None:
+        if s.ready:
+            return
+        s.ready = True
+        s.status = "ready"
+        self._emit("status", s.id, "ready")
+
+    # --- input ------------------------------------------------------------
+
+    async def send_prompt(self, session_id: str, text: str) -> None:
+        s = self._sessions.get(session_id)
+        if not s:
+            raise KeyError(session_id)
+        one_line = " ".join(text.splitlines())  # newlines would submit early
+        self._client.write_pane(s.pty_id, one_line)
+        await asyncio.sleep(0.15)
+        self._client.write_pane(s.pty_id, "\r")
+
+    def interrupt(self, session_id: str) -> None:
+        s = self._sessions.get(session_id)
+        if not s:
+            return
+        self._client.write_pane(s.pty_id, b"\x03")  # Ctrl-C
+
+    async def kill(self, session_id: str) -> None:
+        s = self._sessions.pop(session_id, None)
+        if not s:
+            return
+        for t in s.tasks:
+            t.cancel()
+        try:
+            await asyncio.to_thread(self._client.kill, s.pty_id)
+        except Exception:
+            pass
+        s.status = "exited"
+        self._emit("status", session_id, "exited")
