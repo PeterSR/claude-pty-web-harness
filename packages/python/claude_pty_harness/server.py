@@ -42,12 +42,6 @@ HarnessSource = Union[ClaudeHarness, Callable[[], ClaudeHarness]]
 WsAuthenticator = Callable[[WebSocket], Union[bool, Awaitable[bool]]]
 
 
-def _default_bin() -> str:
-    # pupptyeer isn't on PATH in this monorepo; default to the sibling build.
-    here = os.path.dirname(os.path.abspath(__file__))
-    return os.path.abspath(os.path.join(here, "..", "..", "..", "..", "pupptyeer", "bin", "pupptyeer"))
-
-
 def _resolver(source: HarnessSource) -> Callable[[], ClaudeHarness]:
     if isinstance(source, ClaudeHarness):
         return lambda: source
@@ -206,8 +200,8 @@ def include_harness_routes(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     readiness = "delay" if os.environ.get("READINESS") == "delay" else "screen"
-    pupptyeer_bin = os.environ.get("PUPPTYEER_BIN") or _default_bin()
-    app.state.harness = await ClaudeHarness.create(pupptyeer_bin=pupptyeer_bin, readiness=readiness)
+    # pupptyeer is expected on PATH; override with PUPPTYEER_BIN (read in daemon).
+    app.state.harness = await ClaudeHarness.create(readiness=readiness)
     yield
 
 

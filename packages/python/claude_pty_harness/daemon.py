@@ -51,12 +51,18 @@ async def connect_daemon(opts: DaemonOptions = DaemonOptions()) -> PupptyeerClie
     if not _can_connect(sock):
         binp = _resolve_binary(opts)
         print(f"[daemon] no live socket at {sock}; spawning {binp} daemon")
-        subprocess.Popen(
-            [binp, "daemon"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        try:
+            subprocess.Popen(
+                [binp, "daemon"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                f"pupptyeer binary {binp!r} not found. Put pupptyeer on PATH or "
+                "set PUPPTYEER_BIN (or pass pupptyeer_bin)."
+            ) from e
         up = False
         for _ in range(50):
             if _can_connect(sock):

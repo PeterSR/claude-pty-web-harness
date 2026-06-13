@@ -36,14 +36,12 @@ The reuse surface is `protocol` + `core` (backend) and `protocol` + `react`
 
 - Node 20+ (22 recommended)
 - `claude` on `PATH` (logged in)
-- The pupptyeer daemon binary. The reference server defaults to
-  `../pupptyeer/bin/pupptyeer`; override with `PUPPTYEER_BIN` (or put
-  `pupptyeer` on `PATH`). The daemon is auto-spawned if its socket is dead.
+- The pupptyeer daemon binary on `PATH` (or set `PUPPTYEER_BIN` to its path).
+  The daemon is auto-spawned if its socket is dead; a missing binary errors out.
+  A prebuilt binary is published as the `@petersr/pupptyeer` npm package.
 
 The pupptyeer Node client is the `pupptyeer-client` npm package (a dependency of
-`core`). The daemon binary is still resolved from the sibling checkout by default
-(see `PUPPTYEER_BIN` above); a prebuilt binary is also published as the
-`@petersr/pupptyeer` npm package.
+`core`).
 
 ## Run
 

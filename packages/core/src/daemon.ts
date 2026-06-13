@@ -61,8 +61,21 @@ export async function connectDaemon(opts: DaemonOptions = {}): Promise<Pupptyeer
     });
     child.unref();
 
+    // spawn reports a missing binary asynchronously via "error" (ENOENT);
+    // capture it so it fails loudly instead of crashing as an unhandled event.
+    let spawnError: Error | null = null;
+    child.on("error", (err) => {
+      spawnError = err;
+    });
+
     let up = false;
     for (let i = 0; i < 50; i++) {
+      if (spawnError) {
+        throw new Error(
+          `could not spawn pupptyeer (${(spawnError as Error).message}). Put pupptyeer on PATH ` +
+            `or set pupptyeerBin/PUPPTYEER_BIN.`,
+        );
+      }
       if (await canConnect(sockPath)) {
         up = true;
         break;

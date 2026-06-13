@@ -35,9 +35,9 @@ It serves the identical API on `:4318`, so `npm run dev:app` (the React app,
 Vite proxy to `:4318`) talks to it with no changes. Run **either** the TS server
 or this one, not both (same port).
 
-Env: `PORT`, `HOST`, `PUPPTYEER_BIN` (defaults to the sibling
-`../pupptyeer/bin/pupptyeer`), `PUPPTYEER_SOCK`, `READINESS=delay`
-(fallback for daemons without working capture), `PUPPTYEER_PY_CLIENT`.
+Env: `PORT`, `HOST`, `PUPPTYEER_BIN` (path to the pupptyeer binary; defaults to
+`pupptyeer` on `PATH`), `PUPPTYEER_SOCK`, `READINESS=delay` (fallback for daemons
+without working capture), `PUPPTYEER_PY_CLIENT`.
 
 ## Reusing the core (any transport)
 
