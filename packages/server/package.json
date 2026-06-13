@@ -13,7 +13,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --clean"
   },
   "dependencies": {
     "@claude-pty-harness/core": "*",

@@ -12,7 +12,7 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 // pupptyeer isn't on PATH in this monorepo; default to the sibling build.
 // In a real deployment set PUPPTYEER_BIN (or put pupptyeer on PATH).
 const pupptyeerBin =
-  process.env.PUPPTYEER_BIN ?? path.resolve(import.meta.dirname, "../../../../pty-supervisor/bin/pupptyeer");
+  process.env.PUPPTYEER_BIN ?? path.resolve(import.meta.dirname, "../../../../pupptyeer/bin/pupptyeer");
 
 // "screen" (default) uses pupptyeer 0.2.0 daemon rendering; "delay" avoids
 // capture (set READINESS=delay if the daemon's capture wedges claude).

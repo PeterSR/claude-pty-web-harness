@@ -8,7 +8,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --clean"
   },
   "peerDependencies": {
     "react": ">=18"

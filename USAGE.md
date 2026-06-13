@@ -40,7 +40,7 @@ The reuse surface for your own project is **protocol + core** (backend) and
 - Node 20+ for the TS side; Python 3.10+ (and ideally `uv`) for the Python side.
 
 The harness auto-spawns a daemon if its socket is dead; point it at the binary
-with `PUPPTYEER_BIN` (defaults to the sibling `../pty-supervisor/bin/pupptyeer`).
+with `PUPPTYEER_BIN` (defaults to the sibling `../pupptyeer/bin/pupptyeer`).
 
 ## Quick start (run the demo)
 
@@ -262,7 +262,7 @@ Other options: `pip install -e packages/python`; a PEP 508 file URL
 
 Caveat: the Python package imports the pupptyeer client by path (it is not on
 PyPI). Keep the repos side by side, or set
-`PUPPTYEER_PY_CLIENT=/path/to/pty-supervisor/clients/python`.
+`PUPPTYEER_PY_CLIENT=/path/to/pupptyeer/clients/python`.
 
 ## Local-only hacks and workarounds
 
@@ -275,7 +275,7 @@ Several defaults assume the repos sit side by side:
 
 ```
 ~/dev/personal/
-  pty-supervisor/          # pupptyeer (daemon + clients), not published
+  pupptyeer/          # pupptyeer (daemon + clients), not published
   claude-pty-harness/      # this repo
 ```
 
@@ -285,17 +285,17 @@ If yours differ, set `PUPPTYEER_BIN`, `PUPPTYEER_SOCK`, and `PUPPTYEER_PY_CLIENT
 ### pupptyeer is not on npm or PyPI
 
 - **TS**: `@claude-pty-harness/core` depends on the client by path:
-  `"@petersr/pupptyeer-client": "file:../../../pty-supervisor/clients/typescript"`.
+  `"@petersr/pupptyeer-client": "file:../../../pupptyeer/clients/typescript"`.
   npm symlinks it into `node_modules`.
 - **Python**: the client is a single stdlib file with no packaging, so it can't
   be a normal dependency. `claude_pty_harness/_pupptyeer.py` inserts its dir onto
   `sys.path` and imports it. Default dir is the sibling repo; override with
-  `PUPPTYEER_PY_CLIENT=/path/to/pty-supervisor/clients/python`.
+  `PUPPTYEER_PY_CLIENT=/path/to/pupptyeer/clients/python`.
 
 ### pupptyeer binary is not on PATH
 
 Both reference servers default `PUPPTYEER_BIN` to the sibling build
-`../pty-supervisor/bin/pupptyeer` (resolved relative to the server file). Set
+`../pupptyeer/bin/pupptyeer` (resolved relative to the server file). Set
 `PUPPTYEER_BIN` if it lives elsewhere, or put `pupptyeer` on `PATH`. If the
 daemon socket is dead, the harness spawns `<bin> daemon` for you.
 

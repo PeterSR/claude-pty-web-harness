@@ -8,11 +8,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --clean"
   },
   "dependencies": {
     "@claude-pty-harness/protocol": "*",
-    "@petersr/pupptyeer-client": "file:../../../pty-supervisor/clients/typescript"
+    "@petersr/pupptyeer-client": "file:../../../pupptyeer/clients/typescript"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

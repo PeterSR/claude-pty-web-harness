@@ -2,7 +2,7 @@
 
 Drive the interactive **Claude Code** TUI inside a pseudo-terminal and stream its
 transcript into a chat UI. It launches `claude` via
-[pupptyeer](../pty-supervisor), tails the JSONL transcript Claude persists, and
+[pupptyeer](../pupptyeer), tails the JSONL transcript Claude persists, and
 renders it as chat while the input box drives the same pty.
 
 ```
@@ -37,7 +37,7 @@ The reuse surface is `protocol` + `core` (backend) and `protocol` + `react`
 - Node 20+ (22 recommended)
 - `claude` on `PATH` (logged in)
 - The pupptyeer daemon binary. The reference server defaults to
-  `../pty-supervisor/bin/pupptyeer`; override with `PUPPTYEER_BIN` (or put
+  `../pupptyeer/bin/pupptyeer`; override with `PUPPTYEER_BIN` (or put
   `pupptyeer` on `PATH`). The daemon is auto-spawned if its socket is dead.
 
 The pupptyeer Node client is a local `file:` dependency of `core`.

@@ -19,7 +19,7 @@ from .harness import ClaudeHarness
 def _default_bin() -> str:
     # pupptyeer isn't on PATH in this monorepo; default to the sibling build.
     here = os.path.dirname(os.path.abspath(__file__))
-    return os.path.abspath(os.path.join(here, "..", "..", "..", "..", "pty-supervisor", "bin", "pupptyeer"))
+    return os.path.abspath(os.path.join(here, "..", "..", "..", "..", "pupptyeer", "bin", "pupptyeer"))
 
 
 @asynccontextmanager

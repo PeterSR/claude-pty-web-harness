@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The libs reference the pupptyeer client by local path (TS `file:` dep and the
+# Python `_pupptyeer` shim), so CI checks out pupptyeer (public, read-only) as a
+# sibling dir named `pupptyeer`, matching `../../../pupptyeer/...`.
+jobs:
+  typecheck:
+    name: TypeScript typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout claude-pty-harness
+        uses: actions/checkout@v4
+        with:
+          path: claude-pty-harness
+      - name: Checkout pupptyeer (build dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: PeterSR/pupptyeer
+          path: pupptyeer
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: claude-pty-harness
+        run: npm install --no-audit --no-fund
+      - name: Typecheck (all TS workspaces)
+        working-directory: claude-pty-harness
+        run: npm run typecheck
+
+  python-import:
+    name: Python import check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout claude-pty-harness
+        uses: actions/checkout@v4
+        with:
+          path: claude-pty-harness
+      - name: Checkout pupptyeer (build dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: PeterSR/pupptyeer
+          path: pupptyeer
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        working-directory: claude-pty-harness/packages/python
+        run: pip install -e .
+      - name: Import check
+        working-directory: claude-pty-harness/packages/python
+        env:
+          PUPPTYEER_PY_CLIENT: ${{ github.workspace }}/pupptyeer/clients/python
+        run: |
+          python -c "import claude_pty_harness; from claude_pty_harness import server, harness, jsonl, detect, daemon, protocol; print('imports OK')"

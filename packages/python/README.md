@@ -14,7 +14,7 @@ Mirrors the TS packages:
 | `claude_pty_harness.server` | `@…/server` | reference FastAPI + WebSocket adapter |
 
 It wraps the stdlib-only pupptyeer Python client
-(`pty-supervisor/clients/python/pupptyeer_client.py`). That file isn't on PyPI,
+(`pupptyeer/clients/python/pupptyeer_client.py`). That file isn't on PyPI,
 so it's imported by path; override the location with `PUPPTYEER_PY_CLIENT`.
 
 The pupptyeer client is synchronous (background reader thread); the harness is
@@ -35,7 +35,7 @@ Vite proxy to `:4318`) talks to it with no changes. Run **either** the TS server
 or this one, not both (same port).
 
 Env: `PORT`, `HOST`, `PUPPTYEER_BIN` (defaults to the sibling
-`../pty-supervisor/bin/pupptyeer`), `PUPPTYEER_SOCK`, `READINESS=delay`
+`../pupptyeer/bin/pupptyeer`), `PUPPTYEER_SOCK`, `READINESS=delay`
 (fallback for daemons without working capture), `PUPPTYEER_PY_CLIENT`.
 
 ## Reusing the core (any transport)

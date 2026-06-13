@@ -14,7 +14,11 @@
   "scripts": {
     "dev:server": "npm run dev --workspace @claude-pty-harness/server",
     "dev:app": "npm run dev --workspace @claude-pty-harness/app",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5"
   },
   "license": "MIT"
 }
