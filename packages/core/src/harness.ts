@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { resolve as resolvePath, sep } from "node:path";
-import { PupptyeerClient } from "@petersr/pupptyeer-client";
+import { PupptyeerClient } from "pupptyeer-client";
 import { connectDaemon } from "./daemon.js";
 import { JsonlTailer } from "./jsonl.js";
 import { hasInputPrompt, hasBypassWarning, hasTrustModal, isReadyFooter } from "./detect.js";

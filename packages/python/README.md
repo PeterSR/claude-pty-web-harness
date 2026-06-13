@@ -13,9 +13,10 @@ Mirrors the TS packages:
 | `claude_pty_harness.{detect,jsonl,daemon}` | `core/src/*` | supporting modules |
 | `claude_pty_harness.server` | `@…/server` | reference FastAPI + WebSocket adapter |
 
-It wraps the stdlib-only pupptyeer Python client
-(`pupptyeer/clients/python/pupptyeer_client.py`). That file isn't on PyPI,
-so it's imported by path; override the location with `PUPPTYEER_PY_CLIENT`.
+It wraps the stdlib-only pupptyeer Python client, installed from PyPI as
+`pupptyeer-client` (a declared dependency). For local development against a
+pupptyeer checkout, set `PUPPTYEER_PY_CLIENT` to its `clients/python` directory
+to import that copy instead.
 
 The pupptyeer client is synchronous (background reader thread); the harness is
 asyncio and runs its request/reply calls in a thread executor so the FastAPI

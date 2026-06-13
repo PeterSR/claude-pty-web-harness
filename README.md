@@ -40,7 +40,10 @@ The reuse surface is `protocol` + `core` (backend) and `protocol` + `react`
   `../pupptyeer/bin/pupptyeer`; override with `PUPPTYEER_BIN` (or put
   `pupptyeer` on `PATH`). The daemon is auto-spawned if its socket is dead.
 
-The pupptyeer Node client is a local `file:` dependency of `core`.
+The pupptyeer Node client is the `pupptyeer-client` npm package (a dependency of
+`core`). The daemon binary is still resolved from the sibling checkout by default
+(see `PUPPTYEER_BIN` above); a prebuilt binary is also published as the
+`@petersr/pupptyeer` npm package.
 
 ## Run
 

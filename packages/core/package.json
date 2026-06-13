@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@claude-pty-harness/protocol": "*",
-    "@petersr/pupptyeer-client": "file:../../../pupptyeer/clients/typescript"
+    "pupptyeer-client": "^0.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

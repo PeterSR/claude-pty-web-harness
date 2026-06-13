@@ -3,7 +3,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { PupptyeerClient } from "@petersr/pupptyeer-client";
+import { PupptyeerClient } from "pupptyeer-client";
 
 export interface DaemonOptions {
   /** Override the daemon socket path. Falls back to env / XDG / tmp. */

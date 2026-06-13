@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.29",
+    "pupptyeer-client>=0.5.1",
 ]
 
 [project.scripts]
