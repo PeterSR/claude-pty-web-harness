@@ -27,3 +27,6 @@ __pycache__/
 # Editor
 .idea/
 .vscode/
+
+# Local agent scratch (not committed)
+.agent-workspace/

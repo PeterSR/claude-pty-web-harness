@@ -22,7 +22,7 @@ def _normalize_root(path: str) -> str:
     return os.path.abspath(os.path.expanduser(path))
 
 from . import detect
-from ._pupptyeer import PupptyeerClient
+from ._pupptyeer import PupptyeerClient, Screen
 from .daemon import DaemonOptions, connect_daemon
 from .jsonl import JsonlTailer
 from .protocol import ChatEvent, SessionStatus, SessionSummary
@@ -175,15 +175,15 @@ class ClaudeHarness:
 
     # --- startup / readiness ---------------------------------------------
 
-    async def _capture_lines(self, pty_id: str, settle_ms: int, timeout_ms: int) -> Optional[List[str]]:
-        """captureScreen with a hard timeout; returns the grid lines or None so
-        a misbehaving daemon can't wedge the startup driver."""
+    async def _capture_screen(self, pty_id: str, settle_ms: int, timeout_ms: int) -> Optional[Screen]:
+        """captureScreen with a hard timeout; returns the rendered screen (grid
+        lines + cursor) or None so a misbehaving daemon can't wedge the startup
+        driver."""
         try:
-            screen = await asyncio.wait_for(
+            return await asyncio.wait_for(
                 asyncio.to_thread(self._client.capture_screen, pty_id, settle_ms, timeout_ms),
                 timeout=timeout_ms / 1000 + 2,
             )
-            return screen.lines
         except Exception:
             return None
 
@@ -198,17 +198,29 @@ class ClaudeHarness:
 
         loop = asyncio.get_event_loop()
         deadline = loop.time() + 30
+        style_handled = False
         bypass_accepted = False
         trust_handled = False
 
         while loop.time() < deadline:
             if s.id not in self._sessions or s.ready:
                 return
-            lines = await self._capture_lines(s.pty_id, 300, 1500)
-            if not lines:
+            screen = await self._capture_screen(s.pty_id, 300, 1500)
+            if not screen or not screen.lines:
                 await asyncio.sleep(0.2)
                 continue
+            lines = screen.lines
             text = "\n".join(lines).lower()
+
+            # 0. First-run text-style picker. The highlighted theme row is a
+            #    "<prompt>" selection (not the input prompt) that ready_for_input
+            #    can't distinguish from real input, so accept the auto-detected
+            #    default with Enter.
+            if not style_handled and detect.has_style_picker(text):
+                style_handled = True
+                self._client.write_pane(s.pty_id, "\r")
+                await asyncio.sleep(0.4)
+                continue
 
             # 1. Bypass-permissions warning. Cursor defaults to "1. No, exit"; a
             #    bare Enter would quit claude. Move to "2. Yes, I accept" (Down)
@@ -228,8 +240,10 @@ class ClaudeHarness:
                 await asyncio.sleep(0.4)
                 continue
 
-            # 3. Ready once the input prompt or idle footer is on screen.
-            if detect.has_input_prompt(lines) or detect.is_ready_footer(text):
+            # 3. Ready once claude parks its cursor on the "<prompt>" input row
+            #    (primary signal), or the prompt/idle footer is on screen
+            #    (text fallbacks).
+            if detect.ready_for_input(screen) or detect.has_input_prompt(lines) or detect.is_ready_footer(text):
                 self._mark_ready(s)
                 return
 

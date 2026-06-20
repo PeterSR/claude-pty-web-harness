@@ -4,9 +4,10 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { resolve as resolvePath, sep } from "node:path";
 import { PupptyeerClient } from "pupptyeer-client";
+import type { Screen } from "pupptyeer-client";
 import { connectDaemon } from "./daemon.js";
 import { JsonlTailer } from "./jsonl.js";
-import { hasInputPrompt, hasBypassWarning, hasTrustModal, isReadyFooter } from "./detect.js";
+import { readyForInput, hasInputPrompt, hasBypassWarning, hasTrustModal, hasStylePicker, isReadyFooter } from "./detect.js";
 import type { DaemonOptions } from "./daemon.js";
 import type { ChatEvent, SessionStatus, SessionSummary } from "@claude-pty-harness/protocol";
 
@@ -177,18 +178,30 @@ export class ClaudeHarness extends EventEmitter {
     }
 
     const deadline = Date.now() + 30_000;
+    let styleHandled = false;
     let bypassAccepted = false;
     let trustHandled = false;
 
     while (Date.now() < deadline) {
       if (!this.sessions.has(session.id) || session.ready) return;
 
-      const lines = await this.captureScreen(session.ptyId, 300, 1500);
-      if (!lines) {
+      const screen = await this.captureScreen(session.ptyId, 300, 1500);
+      if (!screen || !screen.lines.length) {
         await sleep(200);
         continue;
       }
+      const lines = screen.lines;
       const text = lines.join("\n").toLowerCase();
+
+      // 0. First-run text-style picker. The highlighted theme row is a "❯"
+      //    selection (not the input prompt) that readyForInput can't distinguish
+      //    from real input, so accept the auto-detected default with Enter.
+      if (!styleHandled && hasStylePicker(text)) {
+        styleHandled = true;
+        this.client.writePane(session.ptyId, "\r");
+        await sleep(400);
+        continue;
+      }
 
       // 1. Bypass-permissions warning. Cursor defaults to "1. No, exit"; a bare
       //    Enter would quit claude. Move to "2. Yes, I accept" (Down) then Enter.
@@ -209,8 +222,9 @@ export class ClaudeHarness extends EventEmitter {
         continue;
       }
 
-      // 3. Ready once the input prompt or idle footer is on screen.
-      if (hasInputPrompt(lines) || isReadyFooter(text)) {
+      // 3. Ready once claude parks its cursor on the "❯" input row (primary
+      //    signal), or the prompt/idle footer is on screen (text fallbacks).
+      if (readyForInput(screen) || hasInputPrompt(lines) || isReadyFooter(text)) {
         this.markReady(session);
         return;
       }
@@ -220,19 +234,19 @@ export class ClaudeHarness extends EventEmitter {
   }
 
   /**
-   * captureScreen with a hard timeout, returning the grid lines or null. The
-   * timeout guards against a daemon whose render call never returns (e.g. a VT
-   * emulator that blocks on undrained query responses), so the startup driver
-   * keeps spinning and respects its own deadline instead of hanging forever.
+   * captureScreen with a hard timeout, returning the rendered screen (grid
+   * lines + cursor) or null. The timeout guards against a daemon whose render
+   * call never returns (e.g. a VT emulator that blocks on undrained query
+   * responses), so the startup driver keeps spinning and respects its own
+   * deadline instead of hanging forever.
    */
-  private async captureScreen(ptyId: string, settleMs: number, timeoutMs: number): Promise<string[] | null> {
+  private async captureScreen(ptyId: string, settleMs: number, timeoutMs: number): Promise<Screen | null> {
     const real = this.client.captureScreen(ptyId, { settleMs, timeoutMs });
     // If the timeout wins the race, `real` is abandoned but may still reject
     // later (e.g. on disconnect); swallow that so it isn't an unhandled rejection.
     real.catch(() => {});
     try {
-      const screen = await Promise.race([real, sleep(timeoutMs + 1000).then(() => null)]);
-      return screen ? screen.lines : null;
+      return await Promise.race([real, sleep(timeoutMs + 1000).then(() => null)]);
     } catch {
       return null;
     }

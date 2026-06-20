@@ -40,12 +40,14 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "pupptyeer-client" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "pupptyeer-client", specifier = ">=0.8.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
 ]
 
@@ -164,6 +166,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cd/63/9496c57188a2ee585e0f1db071d75089a11e98aa86eb99d9d7618fc1edce/idna-3.18.tar.gz", hash = "sha256:ffb385a7e039654cef1ab9ef32c6fafe283c0c0467bba1d9029738ce4a14a848", size = 196711, upload-time = "2026-06-02T14:34:07.794Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/5e/d4e9f1a599fb8e573b7b87160658329fbf28d19eac2718f51fc3def3aa5a/idna-3.18-py3-none-any.whl", hash = "sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2", size = 65455, upload-time = "2026-06-02T14:34:06.319Z" },
+]
+
+[[package]]
+name = "pupptyeer-client"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/79/a655f511fe257aa0c3e474cb4aaf4956b2ab4a3de83d76a3dc0357b7a3bd/pupptyeer_client-0.8.0.tar.gz", hash = "sha256:6a0363da2a1a7ac1abd0f0e992f5f22e3267541f75270ca404dbf1dcab31773f", size = 5765, upload-time = "2026-06-20T11:48:24.072Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/df/59fa3d11a07ea593306c1ad77392d5117d6aae715b3c2fbb152bc76c0c99/pupptyeer_client-0.8.0-py3-none-any.whl", hash = "sha256:74ed4f3b186702a2bc093e3b67084cddc7bdd7ee39cbf9cbc4c763c1c1beefea", size = 6071, upload-time = "2026-06-20T11:48:23.01Z" },
 ]
 
 [[package]]
