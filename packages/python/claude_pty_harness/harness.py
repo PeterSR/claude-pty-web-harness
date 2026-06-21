@@ -23,9 +23,13 @@ def _normalize_root(path: str) -> str:
 
 from . import detect
 from ._pupptyeer import PupptyeerClient, Screen
-from .daemon import DaemonOptions, connect_daemon
 from .jsonl import JsonlTailer
 from .protocol import ChatEvent, SessionStatus, SessionSummary
+
+# The pupptyeer namespace all harness sessions live in. Isolates them from
+# other apps sharing the global daemon (TS and Python share this app, so they
+# share the namespace). See .agent-workspace/pupptyeer-namespaces-plan.md.
+HARNESS_NAMESPACE = "claude-pty-harness"
 
 # Listener(kind, session_id, payload): kind is "chat" (payload=ChatEvent) or
 # "status" (payload=SessionStatus).
@@ -64,12 +68,15 @@ class ClaudeHarness:
     async def create(
         cls,
         *,
-        pupptyeer_bin: Optional[str] = None,
         socket_path: Optional[str] = None,
         readiness: str = "screen",
         allowed_roots: Optional[List[str]] = None,
     ) -> "ClaudeHarness":
-        client = await connect_daemon(DaemonOptions(socket_path=socket_path, pupptyeer_bin=pupptyeer_bin))
+        # Connect-or-scream is the client's job: it resolves the default socket,
+        # never spawns, and raises one canonical error if the daemon is down.
+        client = await asyncio.to_thread(
+            PupptyeerClient.connect, socket_path, HARNESS_NAMESPACE
+        )
         return cls(client, readiness=readiness, allowed_roots=allowed_roots)
 
     def _check_cwd(self, cwd: str) -> str:

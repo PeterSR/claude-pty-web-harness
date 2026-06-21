@@ -5,13 +5,18 @@ import { EventEmitter } from "node:events";
 import { resolve as resolvePath, sep } from "node:path";
 import { PupptyeerClient } from "pupptyeer-client";
 import type { Screen } from "pupptyeer-client";
-import { connectDaemon } from "./daemon.js";
 import { JsonlTailer } from "./jsonl.js";
 import { readyForInput, hasInputPrompt, hasBypassWarning, hasTrustModal, hasStylePicker, isReadyFooter } from "./detect.js";
-import type { DaemonOptions } from "./daemon.js";
 import type { ChatEvent, SessionStatus, SessionSummary } from "@claude-pty-harness/protocol";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The pupptyeer namespace all harness sessions live in. Isolates them from
+ * other apps sharing the global daemon (TS and Python share this app, so they
+ * share the namespace). See .agent-workspace/pupptyeer-namespaces-plan.md.
+ */
+export const HARNESS_NAMESPACE = "claude-pty-harness";
 
 // Bracketed-paste markers. Wrapping prompt text in these makes the TUI insert it
 // literally (newlines and all) instead of submitting at the first newline, the
@@ -19,7 +24,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
 
-export interface HarnessOptions extends DaemonOptions {
+export interface HarnessOptions {
+  /**
+   * Override the daemon socket path. Omitted resolves the default location
+   * ($PUPPTYEER_SOCK, else XDG/tmp) via the pupptyeer client.
+   */
+  socketPath?: string;
   /**
    * How to detect a session is ready for input.
    *  - "screen" (default): read the daemon's rendered grid (captureScreen, needs
@@ -78,7 +88,9 @@ export class ClaudeHarness extends EventEmitter {
     const h = new ClaudeHarness();
     h.readiness = opts.readiness ?? "screen";
     h.allowedRoots = (opts.allowedRoots ?? []).map((r) => resolvePath(r));
-    h.client = await connectDaemon(opts);
+    // Connect-or-scream is the client's job: it resolves the default socket,
+    // never spawns, and throws one canonical error if the daemon is unreachable.
+    h.client = await PupptyeerClient.connect({ socket: opts.socketPath, namespace: HARNESS_NAMESPACE });
     return h;
   }
 

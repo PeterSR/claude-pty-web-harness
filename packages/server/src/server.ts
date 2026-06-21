@@ -12,7 +12,9 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 // capture (set READINESS=delay if the daemon's capture wedges claude).
 const readiness = process.env.READINESS === "delay" ? "delay" : "screen";
 
-// pupptyeer is expected on PATH; override with PUPPTYEER_BIN.
+// Connects to the global pupptyeer daemon (camp A): the client resolves the
+// default socket and fails loud if it is unreachable. Set PUPPTYEER_SOCK to
+// point at a non-default socket.
 const harness = await ClaudeHarness.create({ readiness });
 
 const app = Fastify({ logger: false });

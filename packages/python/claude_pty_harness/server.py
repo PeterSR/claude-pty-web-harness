@@ -200,7 +200,9 @@ def include_harness_routes(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     readiness = "delay" if os.environ.get("READINESS") == "delay" else "screen"
-    # pupptyeer is expected on PATH; override with PUPPTYEER_BIN (read in daemon).
+    # Connects to the global pupptyeer daemon (camp A): the client resolves the
+    # default socket and fails loud if it is unreachable. Set PUPPTYEER_SOCK to
+    # point at a non-default socket.
     app.state.harness = await ClaudeHarness.create(readiness=readiness)
     yield
 

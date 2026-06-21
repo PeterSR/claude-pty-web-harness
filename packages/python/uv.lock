@@ -47,7 +47,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "pupptyeer-client", specifier = ">=0.8.0" },
+    { name = "pupptyeer-client", specifier = ">=0.9.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
 ]
 
@@ -170,11 +170,11 @@ wheels = [
 
 [[package]]
 name = "pupptyeer-client"
-version = "0.8.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/93/79/a655f511fe257aa0c3e474cb4aaf4956b2ab4a3de83d76a3dc0357b7a3bd/pupptyeer_client-0.8.0.tar.gz", hash = "sha256:6a0363da2a1a7ac1abd0f0e992f5f22e3267541f75270ca404dbf1dcab31773f", size = 5765, upload-time = "2026-06-20T11:48:24.072Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/00/72913de5d5b1a17745f97ed7f0fd808ef7da885435c21897d7696afdc403/pupptyeer_client-0.9.0.tar.gz", hash = "sha256:2a98b0d9ae723008a0be7e8daf871d9cbba288b60e2d76212e4e986dda54e1c1", size = 6678, upload-time = "2026-06-21T10:12:49.64Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/df/59fa3d11a07ea593306c1ad77392d5117d6aae715b3c2fbb152bc76c0c99/pupptyeer_client-0.8.0-py3-none-any.whl", hash = "sha256:74ed4f3b186702a2bc093e3b67084cddc7bdd7ee39cbf9cbc4c763c1c1beefea", size = 6071, upload-time = "2026-06-20T11:48:23.01Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/ee/da2014db00ac65b9b920e265382e0c7f9c4304d76daba92148b5b4eaf6bf/pupptyeer_client-0.9.0-py3-none-any.whl", hash = "sha256:d8afd2cde6bd2e352e23cc0fe950714ef756283db62ab64c1c1ff68c51ad43ba", size = 7011, upload-time = "2026-06-21T10:12:48.422Z" },
 ]
 
 [[package]]
