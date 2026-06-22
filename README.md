@@ -27,7 +27,7 @@ The reuse surface is `protocol` + `core` (backend) and `protocol` + `react`
 | Package | What it is | Depends on |
 |---|---|---|
 | `@petersr/claude-pty-web-harness-protocol` | Wire types (`ChatEvent`, `Server/ClientMessage`, ...). Zero runtime. | none |
-| `@petersr/claude-pty-web-harness-core` | `ClaudeHarness`: transport-agnostic logic (pupptyeer + JSONL + VT modal handling). | pupptyeer, @xterm/headless |
+| `@petersr/claude-pty-web-harness-core` | `ClaudeHarness`: transport-agnostic logic (pupptyeer + JSONL + VT modal handling). | pupptyeer-client |
 | `@petersr/claude-pty-web-harness-server` | Reference Fastify/WS adapter (`registerHarnessRoutes`) + runnable entry. | core |
 | `@petersr/claude-pty-web-harness-react` | Headless `useHarnessSession` hook + `createHarnessClient`. No UI. | protocol, react |
 | `@petersr/claude-pty-web-harness-app` | The reference chat UI (POC), built on the libs. | react |
@@ -36,12 +36,19 @@ The reuse surface is `protocol` + `core` (backend) and `protocol` + `react`
 
 - Node 20+ (22 recommended)
 - `claude` on `PATH` (logged in)
-- The pupptyeer daemon binary on `PATH` (or set `PUPPTYEER_BIN` to its path).
-  The daemon is auto-spawned if its socket is dead; a missing binary errors out.
-  A prebuilt binary is published as the `@petersr/pupptyeer` npm package.
+- A running **pupptyeer** daemon. The binary ships as the `@petersr/pupptyeer`
+  npm package; install and start it once:
+
+  ```bash
+  npm i -g @petersr/pupptyeer
+  pupptyeer daemon install   # supervises a user daemon at the default socket
+  ```
+
+  The harness connects to that daemon and fails loud if it is unreachable; it
+  never spawns one. Point at a non-default socket with `PUPPTYEER_SOCK`.
 
 The pupptyeer Node client is the `pupptyeer-client` npm package (a dependency of
-`core`).
+`core`); it is pulled in automatically.
 
 ## Run
 
@@ -62,7 +69,8 @@ Sessions launch with `--permission-mode bypassPermissions` by default.
 import { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
 
 const harness = await ClaudeHarness.create({
-  pupptyeerBin: "/path/to/pupptyeer",
+  // socketPath and readiness are optional; the daemon socket defaults to
+  // $PUPPTYEER_SOCK / $XDG_RUNTIME_DIR/pupptyeer/daemon.sock.
   allowedRoots: ["/home/me/dev"], // optional: reject createSession outside these
 });
 harness.on("chat", (sessionId, event) => send(sessionId, event));   // event: ChatEvent
@@ -113,9 +121,9 @@ stripping ANSI concatenates words. Instead the harness reads the **rendered
 grid** (lines with real spacing) and matches against it. `core/src/detect.ts`
 holds the predicates; `core/src/harness.ts` drives the keystrokes.
 
-The grid comes from the pupptyeer 0.2.0 daemon via `captureScreen` (rendering is
-done in the daemon, the Go analogue of `charmbracelet/x/vt`; we used to do this
-in-process with `@xterm/headless`). Readiness mode is configurable:
+The grid comes from the pupptyeer daemon via `captureScreen` (rendering is done
+in the daemon, the Go analogue of `charmbracelet/x/vt`). Readiness mode is
+configurable:
 
 - `readiness: "screen"` (default): read the daemon's rendered grid and drive the
   startup modals.
@@ -123,12 +131,10 @@ in-process with `@xterm/headless`). Readiness mode is configurable:
   ready after a short delay and rely on claude's remembered trust/permission
   config. A fallback for daemons without working capture.
 
-> Requires a pupptyeer daemon built at commit `e667d9b` or later (the fix for an
-> earlier 0.2.0 bug where capturing a live `claude` session wedged it). If your
-> daemon has been running since before that, restart it so it loads the new
-> binary; otherwise `captureScreen` returns an empty grid and readiness never
-> fires (chat still works via JSONL). `npm run dev:server` auto-spawns a daemon
-> only if the socket is dead.
+> A long-running daemon keeps its old code, so after upgrading pupptyeer restart
+> the daemon (`pupptyeer daemon restart`); otherwise `captureScreen` can return
+> an empty grid and readiness never fires (chat still works via JSONL). Set
+> `READINESS=delay` to skip capture entirely.
 
 ## API (server)
 

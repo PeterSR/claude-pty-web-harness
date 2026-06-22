@@ -10,7 +10,7 @@ Mirrors the TS packages:
 |---|---|---|
 | `claude_pty_web_harness.protocol` | `@…/protocol` | wire types (ChatEvent, summaries, messages) |
 | `claude_pty_web_harness.harness` (`ClaudeHarness`) | `@…/core` | transport-agnostic logic (pupptyeer + JSONL + daemon-rendered modal/readiness detection) |
-| `claude_pty_web_harness.{detect,jsonl,daemon}` | `core/src/*` | supporting modules |
+| `claude_pty_web_harness.{detect,jsonl}` | `core/src/*` | supporting modules |
 | `claude_pty_web_harness.server` | `@…/server` | reference FastAPI + WebSocket adapter |
 
 It wraps the stdlib-only pupptyeer Python client, installed from PyPI as
@@ -35,9 +35,10 @@ It serves the identical API on `:4318`, so `npm run dev:app` (the React app,
 Vite proxy to `:4318`) talks to it with no changes. Run **either** the TS server
 or this one, not both (same port).
 
-Env: `PORT`, `HOST`, `PUPPTYEER_BIN` (path to the pupptyeer binary; defaults to
-`pupptyeer` on `PATH`), `PUPPTYEER_SOCK`, `READINESS=delay` (fallback for daemons
-without working capture), `PUPPTYEER_PY_CLIENT`.
+Env: `PORT`, `HOST`, `PUPPTYEER_SOCK` (non-default daemon socket),
+`READINESS=delay` (fallback for daemons without working capture),
+`PUPPTYEER_PY_CLIENT` (dev only: import a pupptyeer client checkout instead of
+the installed `pupptyeer-client`).
 
 ## Reusing the core (any transport)
 
@@ -45,8 +46,8 @@ without working capture), `PUPPTYEER_PY_CLIENT`.
 from claude_pty_web_harness import ClaudeHarness
 
 harness = await ClaudeHarness.create(
-    pupptyeer_bin="/path/to/pupptyeer",
     allowed_roots=["/home/me/dev"],  # optional: reject create_session outside these
+    # socket_path=..., readiness="screen" | "delay"
 )
 remove = harness.add_listener(lambda kind, sid, payload: ...)  # "chat" | "status"
 summary = await harness.create_session(cwd="/repo", model="sonnet")
@@ -92,7 +93,8 @@ the `APIRouter` if you'd rather include it yourself.
 
 ## Requires
 
-A pupptyeer daemon built at commit `e667d9b` or later (the fix where capturing a
-live claude session no longer wedges it). Restart a long-running daemon so it
-loads the new binary, else `captureScreen` returns an empty grid and readiness
-never fires (chat still works via JSONL); or run with `READINESS=delay`.
+A running pupptyeer daemon (install the `@petersr/pupptyeer` binary and
+`pupptyeer daemon install`). The harness connects to it and fails loud if it is
+unreachable; it never spawns one. Restart the daemon after upgrading pupptyeer
+(`pupptyeer daemon restart`), else `captureScreen` can return an empty grid and
+readiness never fires (chat still works via JSONL); or run with `READINESS=delay`.

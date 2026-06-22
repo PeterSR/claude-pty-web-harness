@@ -8,8 +8,8 @@ import { registerHarnessRoutes } from "./index.js";
 const PORT = Number(process.env.PORT ?? 4318);
 const HOST = process.env.HOST ?? "127.0.0.1";
 
-// "screen" (default) uses pupptyeer 0.2.0 daemon rendering; "delay" avoids
-// capture (set READINESS=delay if the daemon's capture wedges claude).
+// "screen" (default) uses the daemon's rendered grid; "delay" avoids capture
+// (set READINESS=delay if the daemon's capture wedges claude).
 const readiness = process.env.READINESS === "delay" ? "delay" : "screen";
 
 // Connects to the global pupptyeer daemon (camp A): the client resolves the

@@ -66,6 +66,7 @@ export default function App() {
           <input
             value={cwd}
             onChange={(e) => setCwd(e.target.value)}
+            placeholder="/path/to/your/project"
             className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-xs text-slate-100 outline-none focus:border-slate-500"
           />
           <div className="flex items-center gap-2">

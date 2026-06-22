@@ -10,7 +10,8 @@ either backend, and you can mix and match.
 - [JavaScript / TypeScript](#javascript--typescript)
 - [Python](#python)
 - [The wire protocol](#the-wire-protocol)
-- [Referencing the libs without a registry](#referencing-the-libs-without-a-registry)
+- [Install](#install)
+- [Notes and gotchas](#notes-and-gotchas)
 - [Configuration](#configuration)
 
 ## What you get
@@ -33,14 +34,18 @@ The reuse surface for your own project is **protocol + core** (backend) and
 
 ## Prerequisites
 
-- A running **pupptyeer** daemon (built at commit `e667d9b` or later, where
-  capturing a live claude session no longer wedges it). Restart any long-running
-  daemon so it loads that build.
+- A running **pupptyeer** daemon. The binary ships as `@petersr/pupptyeer`:
+
+  ```bash
+  npm i -g @petersr/pupptyeer
+  pupptyeer daemon install   # supervises a user daemon at the default socket
+  ```
+
+  The harness connects to that daemon and fails loud if it is unreachable; it
+  never spawns one. Restart it after upgrading pupptyeer (`pupptyeer daemon
+  restart`) so capture-based readiness keeps working.
 - `claude` on `PATH`, logged in.
 - Node 20+ for the TS side; Python 3.10+ (and ideally `uv`) for the Python side.
-
-The harness auto-spawns a daemon if its socket is dead; point it at the binary
-with `PUPPTYEER_BIN` (defaults to the sibling `../pupptyeer/bin/pupptyeer`).
 
 ## Quick start (run the demo)
 
@@ -71,8 +76,8 @@ import { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
 import type { ChatEvent, SessionStatus } from "@petersr/claude-pty-web-harness-protocol";
 
 const harness = await ClaudeHarness.create({
-  pupptyeerBin: "/path/to/pupptyeer", // optional; else env / PATH
-  // socketPath, readiness: "screen" | "delay"
+  // all optional:
+  // socketPath, readiness: "screen" | "delay", allowedRoots
 });
 
 harness.on("chat", (sessionId: string, event: ChatEvent) => { /* ... */ });
@@ -84,7 +89,7 @@ const session = await harness.createSession({
   // command, permissionMode, extraArgs, cols, rows
 });
 
-await harness.sendPrompt(session.id, "List the files here");
+await harness.sendPrompt(session.id, "first line\nsecond line"); // multi-line, one paste
 harness.interrupt(session.id);     // Ctrl-C the current turn
 harness.list();                    // SessionSummary[]
 harness.get(session.id);           // SessionSummary | undefined
@@ -101,11 +106,17 @@ import Fastify from "fastify";
 import { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
 import { registerHarnessRoutes } from "@petersr/claude-pty-web-harness-server";
 
-const harness = await ClaudeHarness.create({ pupptyeerBin });
+const harness = await ClaudeHarness.create();
 const app = Fastify();
 await registerHarnessRoutes(app, harness, { prefix: "/api" });
 await app.listen({ port: 4318, host: "127.0.0.1" });
 ```
+
+`registerHarnessRoutes` accepts auth hooks so you can put it behind your app's
+auth: `authenticate(req)` guards the REST routes (401 on false) and
+`authenticateWs(req)` guards the WebSocket upgrade (browsers can't send an
+`Authorization` header on a WS, so validate a short-lived ticket / query token
+there). `/health` stays open.
 
 ### Use the React hook (bring your own components)
 
@@ -135,9 +146,8 @@ harness is asyncio and runs the client's calls in a thread executor.
 ### Install
 
 ```bash
-cd packages/python
-uv venv && uv pip install -e .
-# or: pip install -e packages/python
+pip install claude-pty-web-harness
+# or, from a checkout: cd packages/python && uv venv && uv pip install -e .
 ```
 
 ### Use the core
@@ -148,8 +158,8 @@ from claude_pty_web_harness import ClaudeHarness
 
 async def main():
     harness = await ClaudeHarness.create(
-        pupptyeer_bin="/path/to/pupptyeer",   # optional; else env / PATH
-        # socket_path=..., readiness="screen" | "delay",
+        # all optional: socket_path=..., readiness="screen" | "delay",
+        # allowed_roots=[...]
     )
 
     # listener(kind, session_id, payload): kind is "chat" (ChatEvent dict)
@@ -161,7 +171,7 @@ async def main():
         model="sonnet",        # optional
         # command, permission_mode, extra_args, cols, rows
     )
-    await harness.send_prompt(session["id"], "List the files here")
+    await harness.send_prompt(session["id"], "first line\nsecond line")  # multi-line, one paste
     harness.interrupt(session["id"])
     harness.list()                       # list[SessionSummary]
     harness.get(session["id"])           # SessionSummary | None
@@ -181,7 +191,9 @@ PORT=4318 uv run uvicorn claude_pty_web_harness.server:app
 ```
 
 Or mount the harness on your own FastAPI app: see `claude_pty_web_harness/server.py`
-(`lifespan` creates the harness; each route reads `app.state.harness`).
+(`lifespan` creates the harness; each route reads `app.state.harness`). REST
+routes accept FastAPI `dependencies` for auth; the WebSocket is guarded
+separately via `authenticate_ws`.
 
 ## The wire protocol
 
@@ -221,33 +233,35 @@ result         { kind:"result", subtype?, durationMs?, costUsd?, text? }
 Chat is built from the JSONL Claude persists (we generate the `--session-id`);
 the pty is used for input and for driving the startup modals.
 
-## Referencing the libs without a registry
-
-Neither side needs npm/PyPI. The pupptyeer client itself is referenced locally
-the same way.
+## Install
 
 ### JS (npm)
 
-These are npm workspaces, so inside this repo they resolve to source. From
-another project, use a `file:` dependency:
+The libraries are published under the `@petersr/` scope:
 
-```jsonc
-// consumer package.json
-{
-  "dependencies": {
-    "@petersr/claude-pty-web-harness-core": "file:../claude-pty-web-harness/packages/core",
-    "@petersr/claude-pty-web-harness-protocol": "file:../claude-pty-web-harness/packages/protocol"
-  }
-}
+```bash
+npm i @petersr/claude-pty-web-harness-core @petersr/claude-pty-web-harness-protocol
+# frontend:
+npm i @petersr/claude-pty-web-harness-react
 ```
 
-The TS packages ship source (no build step); a bundler (Vite, tsx, etc.)
-transpiles them. The pupptyeer client is itself a `file:` dependency of `core`.
+`core` pulls in the `pupptyeer-client` npm package automatically.
+
+**Developing in this repo:** these are npm workspaces, so `npm install` at the
+root links every package and resolves them to source. The reference `server`
+(via `tsx`) and `app` (via Vite) run the TypeScript directly, so there is no
+per-package build step for the demo.
 
 ### Python
 
+```bash
+pip install claude-pty-web-harness   # pulls pupptyeer-client from PyPI
+```
+
+Or, from a checkout (editable, live changes):
+
 ```toml
-# consumer pyproject.toml (uv) - editable, live changes
+# consumer pyproject.toml (uv)
 [project]
 dependencies = ["claude-pty-web-harness"]
 
@@ -255,80 +269,21 @@ dependencies = ["claude-pty-web-harness"]
 claude-pty-web-harness = { path = "../claude-pty-web-harness/packages/python", editable = true }
 ```
 
-Other options: `pip install -e packages/python`; a PEP 508 file URL
-(`"claude-pty-web-harness @ file:///abs/path/packages/python"`); a built wheel
-(`uv build` then `pip install dist/*.whl`); or a git URL with
-`#subdirectory=packages/python`.
+For local development against an unpublished pupptyeer checkout, set
+`PUPPTYEER_PY_CLIENT=/path/to/pupptyeer/clients/python` to import that copy
+instead of the installed `pupptyeer-client`.
 
-Caveat: the Python package imports the pupptyeer client by path (it is not on
-PyPI). Keep the repos side by side, or set
-`PUPPTYEER_PY_CLIENT=/path/to/pupptyeer/clients/python`.
+## Notes and gotchas
 
-## Local-only hacks and workarounds
+### Daemon must be restarted after a pupptyeer upgrade
 
-This project runs fully locally against unpublished pupptyeer and consumes its
-own libs from source. The non-obvious bits, in one place:
-
-### Repo layout assumption
-
-Several defaults assume the repos sit side by side:
-
-```
-~/dev/personal/
-  pupptyeer/          # pupptyeer (daemon + clients), not published
-  claude-pty-web-harness/      # this repo
-```
-
-If yours differ, set `PUPPTYEER_BIN`, `PUPPTYEER_SOCK`, and `PUPPTYEER_PY_CLIENT`
-(below) accordingly.
-
-### pupptyeer is not on npm or PyPI
-
-- **TS**: `@petersr/claude-pty-web-harness-core` depends on the client by path:
-  `"@petersr/pupptyeer-client": "file:../../../pupptyeer/clients/typescript"`.
-  npm symlinks it into `node_modules`.
-- **Python**: the client is a single stdlib file with no packaging, so it can't
-  be a normal dependency. `claude_pty_web_harness/_pupptyeer.py` inserts its dir onto
-  `sys.path` and imports it. Default dir is the sibling repo; override with
-  `PUPPTYEER_PY_CLIENT=/path/to/pupptyeer/clients/python`.
-
-### pupptyeer binary is not on PATH
-
-Both reference servers default `PUPPTYEER_BIN` to the sibling build
-`../pupptyeer/bin/pupptyeer` (resolved relative to the server file). Set
-`PUPPTYEER_BIN` if it lives elsewhere, or put `pupptyeer` on `PATH`. If the
-daemon socket is dead, the harness spawns `<bin> daemon` for you.
-
-### The untyped JS client needs an ambient .d.ts
-
-The pupptyeer Node client ships as plain `.mjs` with no types. `core` carries a
-hand-written `src/pupptyeer-client.d.ts` declaring the module so TypeScript is
-happy. If the client's API changes, update that file.
-
-### TS libs are consumed from source (no build step)
-
-Each TS package's `main`/`exports` points at `src/*.ts`, not a compiled `dist`.
-Inside the repo, npm workspaces resolve them; `tsx` (server) and Vite (app) run
-the TS directly. The app additionally pins them via Vite `resolve.alias` and
-tsconfig `paths` to the packages' `src/index.ts` so Vite treats them as source.
-Consequence: there is no `npm run build` of the libs yet. To `npm publish` them
-you'd add a per-package build (tsup/tsc).
-
-### Port 4318, not 4317
-
-The default backend port is 4318 because 4317 was taken by an unrelated local
-service. Override with `PORT`. The Vite app proxies `/api` to `BACKEND_URL`
-(default `http://127.0.0.1:4318`).
-
-### Daemon must be restarted after a rebuild
-
-A long-running daemon keeps its old code. After rebuilding pupptyeer, restart the
-daemon or `captureScreen` returns an empty grid (readiness silently never fires;
-chat still works via JSONL). If you cannot restart the shared default-socket
-daemon, run a private one and point the server at it:
+A long-running daemon keeps its old code. After upgrading pupptyeer, restart the
+daemon (`pupptyeer daemon restart`) or `captureScreen` can return an empty grid
+(readiness silently never fires; chat still works via JSONL). To run against a
+private daemon instead of the shared default-socket one:
 
 ```bash
-PUPPTYEER_SOCK=/tmp/cph/d.sock /path/to/pupptyeer daemon &
+PUPPTYEER_SOCK=/tmp/cph/d.sock pupptyeer daemon &
 PORT=4318 PUPPTYEER_SOCK=/tmp/cph/d.sock npm run dev:server   # or the Python server
 ```
 
@@ -344,17 +299,22 @@ blind off the rendered grid:
 - If a daemon's capture is unavailable, `READINESS=delay` skips capture entirely
   and marks ready after a short delay (relies on claude's remembered config).
 
-### Prompts are submitted as a single line
+### Multi-line prompts
 
-`sendPrompt` replaces newlines with spaces before typing, because Enter submits
-in the TUI and a multi-line paste would submit early. Multi-line prompts are not
-supported by the prototype.
+`sendPrompt` delivers the text as a bracketed paste so multi-line input lands in
+the TUI intact, then submits with one Enter. Pass `{ submit: false }` (TS) /
+`submit=False` (Python) to stage the text without sending.
 
 ### Optimistic echo in the React hook
 
 `useHarnessSession` shows your prompt immediately as a local `user` event, then
 de-dupes it by text when the real JSONL `user` entry arrives. Harmless, but it is
 why a just-sent prompt can briefly exist twice in state.
+
+### Port 4318, not 4317
+
+The default backend port is 4318. Override with `PORT`. The Vite app proxies
+`/api` to `BACKEND_URL` (default `http://127.0.0.1:4318`).
 
 ## Configuration
 
@@ -364,14 +324,13 @@ Environment variables (read by both reference servers):
 |---|---|
 | `PORT` | server port (default 4318) |
 | `HOST` | bind host (default 127.0.0.1) |
-| `PUPPTYEER_BIN` | path to the pupptyeer binary (else the sibling build, else PATH) |
 | `PUPPTYEER_SOCK` | daemon socket (else `$XDG_RUNTIME_DIR/pupptyeer/daemon.sock`) |
 | `READINESS` | `screen` (default, daemon-rendered) or `delay` (no capture; fallback) |
-| `PUPPTYEER_PY_CLIENT` | (Python) dir of the pupptyeer Python client |
+| `PUPPTYEER_PY_CLIENT` | (Python, dev only) dir of a pupptyeer Python client checkout to import instead of the installed package |
 | `BACKEND_URL` | (app/Vite) proxy target (default `http://127.0.0.1:4318`) |
 
-Programmatic equivalents: TS `ClaudeHarness.create({ pupptyeerBin, socketPath,
-readiness })` and `createSession({ cwd, command, model, permissionMode,
-extraArgs, cols, rows })`; Python `ClaudeHarness.create(pupptyeer_bin=...,
-socket_path=..., readiness=...)` and `create_session(cwd=..., command=...,
+Programmatic equivalents: TS `ClaudeHarness.create({ socketPath, readiness,
+allowedRoots })` and `createSession({ cwd, command, model, permissionMode,
+extraArgs, cols, rows })`; Python `ClaudeHarness.create(socket_path=...,
+readiness=..., allowed_roots=...)` and `create_session(cwd=..., command=...,
 model=..., permission_mode=..., extra_args=..., cols=..., rows=...)`.

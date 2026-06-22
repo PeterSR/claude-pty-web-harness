@@ -5,55 +5,39 @@ on:
     branches: [main]
   pull_request:
 
-# The libs reference the pupptyeer client by local path (TS `file:` dep and the
-# Python `_pupptyeer` shim), so CI checks out pupptyeer (public, read-only) as a
-# sibling dir named `pupptyeer`, matching `../../../pupptyeer/...`.
+# The pupptyeer client is published (npm `pupptyeer-client`, PyPI
+# `pupptyeer-client`), so the standard installs pull it in. No sibling checkout.
 jobs:
   typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout claude-pty-web-harness
-        uses: actions/checkout@v4
-        with:
-          path: claude-pty-web-harness
-      - name: Checkout pupptyeer (build dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: PeterSR/pupptyeer
-          path: pupptyeer
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install
-        working-directory: claude-pty-web-harness
         run: npm install --no-audit --no-fund
       - name: Typecheck (all TS workspaces)
-        working-directory: claude-pty-web-harness
         run: npm run typecheck
+      - name: Test (core)
+        run: npm run test --workspace @petersr/claude-pty-web-harness-core
 
-  python-import:
-    name: Python import check
+  python:
+    name: Python import + tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout claude-pty-web-harness
-        uses: actions/checkout@v4
-        with:
-          path: claude-pty-web-harness
-      - name: Checkout pupptyeer (build dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: PeterSR/pupptyeer
-          path: pupptyeer
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install package
-        working-directory: claude-pty-web-harness/packages/python
-        run: pip install -e .
+      - name: Install package (with test deps)
+        working-directory: packages/python
+        run: pip install -e . pytest
       - name: Import check
-        working-directory: claude-pty-web-harness/packages/python
-        env:
-          PUPPTYEER_PY_CLIENT: ${{ github.workspace }}/pupptyeer/clients/python
+        working-directory: packages/python
         run: |
-          python -c "import claude_pty_web_harness; from claude_pty_web_harness import server, harness, jsonl, detect, daemon, protocol; print('imports OK')"
+          python -c "import claude_pty_web_harness; from claude_pty_web_harness import server, harness, jsonl, detect, protocol; print('imports OK')"
+      - name: Tests
+        working-directory: packages/python
+        run: pytest -q

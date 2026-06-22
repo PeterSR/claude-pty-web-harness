@@ -32,11 +32,11 @@ export interface HarnessOptions {
   socketPath?: string;
   /**
    * How to detect a session is ready for input.
-   *  - "screen" (default): read the daemon's rendered grid (captureScreen, needs
-   *    pupptyeer 0.2.0) and drive past the startup modals.
+   *  - "screen" (default): read the daemon's rendered grid (captureScreen) and
+   *    drive past the startup modals.
    *  - "delay": never capture; mark ready after a short delay and rely on
    *    claude's remembered trust/permission config. Use this if the daemon's
-   *    capture wedges claude sessions (see pupptyeer 0.2.0 capture bug).
+   *    capture wedges claude sessions.
    */
   readiness?: "screen" | "delay";
   /**
