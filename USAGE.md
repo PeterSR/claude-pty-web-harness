@@ -275,6 +275,34 @@ instead of the installed `pupptyeer-client`.
 
 ## Notes and gotchas
 
+### Permission modes (read this before exposing it)
+
+Sessions default to `--permission-mode bypassPermissions`, which approves every
+tool call with no checks: the agent can run arbitrary commands and edit any file
+inside the session's `cwd` without prompting. The default favors low friction
+and is **not** safe for untrusted input. Contain it with `allowedRoots` (reject a
+`cwd` outside an allowlist) and the server auth hooks, and only point it at
+directories you trust.
+
+Because the harness drives the real `claude` TUI in a pty, it can use claude's
+interactive **auto mode**, where a classifier vets each action, auto-approving
+safe ones and prompting/denying risky ones. It is the best overall balance for a
+web-driven agent and works here precisely because we own the pty (it is not
+available in headless `claude -p`). Select it per session:
+
+```ts
+await harness.createSession({ cwd, permissionMode: "auto" });
+```
+```python
+await harness.create_session(cwd="/repo", permission_mode="auto")
+```
+
+`permissionMode` / `permission_mode` is passed straight through to
+`claude --permission-mode <value>`, so `default`, `plan`, `acceptEdits`, `auto`,
+and `bypassPermissions` all work (use `extraArgs` for anything else). Auto mode
+needs a recent claude CLI and an eligible model; if it is unavailable claude
+falls back, so confirm it actually engaged.
+
 ### Daemon must be restarted after a pupptyeer upgrade
 
 A long-running daemon keeps its old code. After upgrading pupptyeer, restart the

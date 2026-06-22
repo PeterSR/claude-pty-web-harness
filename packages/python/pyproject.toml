@@ -1,13 +1,34 @@
 [project]
 name = "claude-pty-web-harness"
-version = "0.0.1"
+version = "0.1.0"
 description = "Python backend parity for claude-pty-web-harness: drive Claude Code in a pupptyeer pty and stream its JSONL transcript over the same HTTP/WS protocol as the TS server."
+readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Peter Severin Rasmussen", email = "git@petersr.com" }]
+keywords = ["claude", "claude-code", "pty", "pupptyeer", "fastapi", "websocket"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Topic :: Software Development :: Libraries",
+]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.29",
     "pupptyeer-client>=0.9.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/PeterSR/claude-pty-web-harness"
+Repository = "https://github.com/PeterSR/claude-pty-web-harness"
+Issues = "https://github.com/PeterSR/claude-pty-web-harness/issues"
 
 [project.scripts]
 claude-pty-web-harness-server = "claude_pty_web_harness.server:main"

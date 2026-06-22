@@ -59,7 +59,31 @@ npm run dev:app        # @petersr/claude-pty-web-harness-app on :4316 (proxies /
 ```
 
 Open http://localhost:4316, set a working directory, click **New session**, chat.
-Sessions launch with `--permission-mode bypassPermissions` by default.
+
+## Permission modes
+
+> [!WARNING]
+> Sessions launch with `--permission-mode bypassPermissions` by default. That
+> approves **every** tool call with no checks, so the agent can run arbitrary
+> commands and edit any file inside the session's `cwd` without prompting. Only
+> point it at directories you trust, and contain it with `allowedRoots` (reject
+> a `cwd` outside an allowlist) plus the server auth hooks. The default favors
+> low friction; it is not a safe default for untrusted input.
+
+Because the harness drives the real `claude` TUI in a pty, it can use claude's
+**interactive auto mode**, where a classifier vets each action and auto-approves
+the safe ones while still prompting/denying the risky ones. This is the best
+overall balance for a web-driven agent, and (unlike headless `claude -p`) it
+works here precisely because we own the pty. Select it per session:
+
+```ts
+await harness.createSession({ cwd, permissionMode: "auto" }); // classifier-gated
+```
+
+`permissionMode` is passed straight through to `claude --permission-mode <value>`,
+so any of `default`, `plan`, `acceptEdits`, `auto`, or `bypassPermissions` works
+(use `extraArgs` for anything else). Auto mode needs a recent claude CLI and an
+eligible model; if it is unavailable claude falls back, so verify it engaged.
 
 ## Reusing the libs in another project
 
@@ -81,8 +105,9 @@ await harness.sendPrompt(id, "first line\nsecond line"); // multi-line, sent as 
 // also: harness.list(), harness.transcript(id), harness.interrupt(id), harness.kill(id)
 ```
 
-`createSession` also takes `command`, `permissionMode`, and `extraArgs` if you
-want to drive something other than `claude --permission-mode bypassPermissions`.
+`createSession` also takes `command`, `permissionMode` (see [Permission
+modes](#permission-modes)), and `extraArgs` if you want to drive something other
+than the default `claude --permission-mode bypassPermissions`.
 `sendPrompt` delivers the text as a bracketed paste so multi-line input lands in
 the TUI intact, then submits with one Enter (pass `{ submit: false }` to stage
 without sending).

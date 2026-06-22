@@ -1,21 +1,39 @@
 {
   "name": "@petersr/claude-pty-web-harness-react",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Headless React hook + client for a claude-pty-web-harness server. No UI, no styling.",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PeterSR/claude-pty-web-harness.git",
+    "directory": "packages/react"
+  },
+  "bugs": "https://github.com/PeterSR/claude-pty-web-harness/issues",
+  "homepage": "https://github.com/PeterSR/claude-pty-web-harness#readme",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.ts --format esm --dts --clean"
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "react": ">=18"
   },
   "dependencies": {
-    "@petersr/claude-pty-web-harness-protocol": "*"
+    "@petersr/claude-pty-web-harness-protocol": "^0.1.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

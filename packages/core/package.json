@@ -1,19 +1,37 @@
 {
   "name": "@petersr/claude-pty-web-harness-core",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Transport-agnostic core: drive Claude Code in a pupptyeer pty, stream its JSONL as chat events.",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PeterSR/claude-pty-web-harness.git",
+    "directory": "packages/core"
+  },
+  "bugs": "https://github.com/PeterSR/claude-pty-web-harness/issues",
+  "homepage": "https://github.com/PeterSR/claude-pty-web-harness#readme",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsup src/index.ts --format esm --dts --clean",
-    "test": "tsx --test src/*.test.ts"
+    "test": "tsx --test src/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
-    "@petersr/claude-pty-web-harness-protocol": "*",
+    "@petersr/claude-pty-web-harness-protocol": "^0.1.0",
     "pupptyeer-client": "^0.9.0"
   },
   "devDependencies": {

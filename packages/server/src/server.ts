@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Runnable reference server: builds a ClaudeHarness and serves it on HTTP/WS.
 // This is the demo's transport; a real app would call registerHarnessRoutes on
 // its own Fastify instance (see ./index.ts).
