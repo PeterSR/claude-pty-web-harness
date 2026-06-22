@@ -35,7 +35,7 @@ wheels = [
 ]
 
 [[package]]
-name = "claude-pty-harness"
+name = "claude-pty-web-harness"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [

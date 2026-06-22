@@ -15,8 +15,8 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@claude-pty-harness/react": ["../react/src/index.ts"],
-      "@claude-pty-harness/protocol": ["../protocol/src/index.ts"]
+      "@petersr/claude-pty-web-harness-react": ["../react/src/index.ts"],
+      "@petersr/claude-pty-web-harness-protocol": ["../protocol/src/index.ts"]
     }
   },
   "include": ["src"]

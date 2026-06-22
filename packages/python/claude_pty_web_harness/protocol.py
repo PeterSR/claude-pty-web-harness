@@ -1,4 +1,4 @@
-"""The shared wire contract, mirroring @claude-pty-harness/protocol so the same
+"""The shared wire contract, mirroring @petersr/claude-pty-web-harness-protocol so the same
 React frontend talks to this backend unchanged. ChatEvents and session
 summaries travel as plain JSON dicts with these exact (camelCase) keys; the
 TypedDicts below document the shapes. Kept as dicts at runtime to guarantee

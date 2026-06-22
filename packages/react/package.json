@@ -1,7 +1,7 @@
 {
-  "name": "@claude-pty-harness/react",
+  "name": "@petersr/claude-pty-web-harness-react",
   "version": "0.0.1",
-  "description": "Headless React hook + client for a claude-pty-harness server. No UI, no styling.",
+  "description": "Headless React hook + client for a claude-pty-web-harness server. No UI, no styling.",
   "type": "module",
   "main": "src/index.ts",
   "exports": {
@@ -15,7 +15,7 @@
     "react": ">=18"
   },
   "dependencies": {
-    "@claude-pty-harness/protocol": "*"
+    "@petersr/claude-pty-web-harness-protocol": "*"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

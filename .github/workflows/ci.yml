@@ -13,10 +13,10 @@ jobs:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout claude-pty-harness
+      - name: Checkout claude-pty-web-harness
         uses: actions/checkout@v4
         with:
-          path: claude-pty-harness
+          path: claude-pty-web-harness
       - name: Checkout pupptyeer (build dependency)
         uses: actions/checkout@v4
         with:
@@ -26,20 +26,20 @@ jobs:
         with:
           node-version: 22
       - name: Install
-        working-directory: claude-pty-harness
+        working-directory: claude-pty-web-harness
         run: npm install --no-audit --no-fund
       - name: Typecheck (all TS workspaces)
-        working-directory: claude-pty-harness
+        working-directory: claude-pty-web-harness
         run: npm run typecheck
 
   python-import:
     name: Python import check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout claude-pty-harness
+      - name: Checkout claude-pty-web-harness
         uses: actions/checkout@v4
         with:
-          path: claude-pty-harness
+          path: claude-pty-web-harness
       - name: Checkout pupptyeer (build dependency)
         uses: actions/checkout@v4
         with:
@@ -49,11 +49,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install package
-        working-directory: claude-pty-harness/packages/python
+        working-directory: claude-pty-web-harness/packages/python
         run: pip install -e .
       - name: Import check
-        working-directory: claude-pty-harness/packages/python
+        working-directory: claude-pty-web-harness/packages/python
         env:
           PUPPTYEER_PY_CLIENT: ${{ github.workspace }}/pupptyeer/clients/python
         run: |
-          python -c "import claude_pty_harness; from claude_pty_harness import server, harness, jsonl, detect, daemon, protocol; print('imports OK')"
+          python -c "import claude_pty_web_harness; from claude_pty_web_harness import server, harness, jsonl, detect, daemon, protocol; print('imports OK')"

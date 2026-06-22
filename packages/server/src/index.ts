@@ -1,10 +1,10 @@
-// @claude-pty-harness/server: a reference adapter. registerHarnessRoutes mounts
+// @petersr/claude-pty-web-harness-server: a reference adapter. registerHarnessRoutes mounts
 // the harness REST + WebSocket endpoints onto any Fastify instance, so you can
 // embed it in an existing app instead of running the bundled server.
 import websocket from "@fastify/websocket";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { ClaudeHarness } from "@claude-pty-harness/core";
-import type { ChatEvent, ClientMessage, ServerMessage, SessionStatus } from "@claude-pty-harness/protocol";
+import type { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
+import type { ChatEvent, ClientMessage, ServerMessage, SessionStatus } from "@petersr/claude-pty-web-harness-protocol";
 
 // Minimal structural type for the ws socket (@fastify/websocket passes a `ws`
 // WebSocket); avoids depending on @types/ws.

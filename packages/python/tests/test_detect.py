@@ -1,8 +1,8 @@
 """Run with: uv run python -m unittest discover -s tests (stdlib only)."""
 import unittest
 
-from claude_pty_harness import detect
-from claude_pty_harness._pupptyeer import Screen, Cursor
+from claude_pty_web_harness import detect
+from claude_pty_web_harness._pupptyeer import Screen, Cursor
 
 
 def screen(cursor: Cursor, *lines: str) -> Screen:

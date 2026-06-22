@@ -1,5 +1,5 @@
 {
-  "name": "@claude-pty-harness/server",
+  "name": "@petersr/claude-pty-web-harness-server",
   "version": "0.0.1",
   "description": "Reference Fastify + WebSocket adapter that exposes a ClaudeHarness over HTTP/WS.",
   "type": "module",
@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "claude-pty-harness-server": "src/server.ts"
+    "claude-pty-web-harness-server": "src/server.ts"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -17,8 +17,8 @@
     "build": "tsup src/index.ts --format esm --dts --clean"
   },
   "dependencies": {
-    "@claude-pty-harness/core": "*",
-    "@claude-pty-harness/protocol": "*",
+    "@petersr/claude-pty-web-harness-core": "*",
+    "@petersr/claude-pty-web-harness-protocol": "*",
     "@fastify/websocket": "^11.0.1",
     "fastify": "^5.1.0"
   },

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChatEvent } from "@claude-pty-harness/protocol";
+import type { ChatEvent } from "@petersr/claude-pty-web-harness-protocol";
 
 function Bubble({
   align,

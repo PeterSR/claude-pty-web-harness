@@ -1,7 +1,7 @@
 {
-  "name": "@claude-pty-harness/protocol",
+  "name": "@petersr/claude-pty-web-harness-protocol",
   "version": "0.0.1",
-  "description": "Shared wire types for the claude-pty-harness (zero runtime).",
+  "description": "Shared wire types for the claude-pty-web-harness (zero runtime).",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

@@ -29,7 +29,7 @@ from .protocol import ChatEvent, SessionStatus, SessionSummary
 # The pupptyeer namespace all harness sessions live in. Isolates them from
 # other apps sharing the global daemon (TS and Python share this app, so they
 # share the namespace). See .agent-workspace/pupptyeer-namespaces-plan.md.
-HARNESS_NAMESPACE = "claude-pty-harness"
+HARNESS_NAMESPACE = "claude-pty-web-harness"
 
 # Listener(kind, session_id, payload): kind is "chat" (payload=ChatEvent) or
 # "status" (payload=SessionStatus).

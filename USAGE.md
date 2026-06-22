@@ -1,6 +1,6 @@
 # Usage
 
-How to use the claude-pty-harness libraries from JavaScript/TypeScript and from
+How to use the claude-pty-web-harness libraries from JavaScript/TypeScript and from
 Python. Both speak the **same HTTP/WS protocol**, so any frontend works against
 either backend, and you can mix and match.
 
@@ -20,15 +20,15 @@ so the React app (or any client) talks to whichever is behind the proxy.
 
 | Package | Lang | Role |
 |---|---|---|
-| `@claude-pty-harness/protocol` | TS | wire types (`ChatEvent`, messages, summaries), zero runtime |
-| `@claude-pty-harness/core` | TS | `ClaudeHarness`: transport-agnostic logic (pupptyeer + JSONL + modal/readiness detection) |
-| `@claude-pty-harness/server` | TS | reference Fastify + WebSocket adapter |
-| `@claude-pty-harness/react` | TS | headless `useHarnessSession` hook + `createHarnessClient` |
-| `@claude-pty-harness/app` | TS | the reference chat UI (the POC) |
-| `claude_pty_harness` | Python | parity backend: `ClaudeHarness` + FastAPI/WS server |
+| `@petersr/claude-pty-web-harness-protocol` | TS | wire types (`ChatEvent`, messages, summaries), zero runtime |
+| `@petersr/claude-pty-web-harness-core` | TS | `ClaudeHarness`: transport-agnostic logic (pupptyeer + JSONL + modal/readiness detection) |
+| `@petersr/claude-pty-web-harness-server` | TS | reference Fastify + WebSocket adapter |
+| `@petersr/claude-pty-web-harness-react` | TS | headless `useHarnessSession` hook + `createHarnessClient` |
+| `@petersr/claude-pty-web-harness-app` | TS | the reference chat UI (the POC) |
+| `claude_pty_web_harness` | Python | parity backend: `ClaudeHarness` + FastAPI/WS server |
 
 The reuse surface for your own project is **protocol + core** (backend) and
-**protocol + react** (frontend), or the Python `claude_pty_harness` package.
+**protocol + react** (frontend), or the Python `claude_pty_web_harness` package.
 `server` and `app` are reference wiring you can copy or replace.
 
 ## Prerequisites
@@ -51,7 +51,7 @@ npm install
 npm run dev:server                         # TS (Fastify)
 # or:
 cd packages/python && uv venv && uv pip install -e . \
-  && PORT=4318 uv run uvicorn claude_pty_harness.server:app
+  && PORT=4318 uv run uvicorn claude_pty_web_harness.server:app
 
 # Frontend (Vite on 4316, proxies /api + ws to 4318)
 npm run dev:app
@@ -67,8 +67,8 @@ Open http://localhost:4316, set a working directory, click **New session**, chat
 Wire it to any transport.
 
 ```ts
-import { ClaudeHarness } from "@claude-pty-harness/core";
-import type { ChatEvent, SessionStatus } from "@claude-pty-harness/protocol";
+import { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
+import type { ChatEvent, SessionStatus } from "@petersr/claude-pty-web-harness-protocol";
 
 const harness = await ClaudeHarness.create({
   pupptyeerBin: "/path/to/pupptyeer", // optional; else env / PATH
@@ -98,8 +98,8 @@ Mount the routes on your own Fastify app, or run the bundled server.
 
 ```ts
 import Fastify from "fastify";
-import { ClaudeHarness } from "@claude-pty-harness/core";
-import { registerHarnessRoutes } from "@claude-pty-harness/server";
+import { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
+import { registerHarnessRoutes } from "@petersr/claude-pty-web-harness-server";
 
 const harness = await ClaudeHarness.create({ pupptyeerBin });
 const app = Fastify();
@@ -110,7 +110,7 @@ await app.listen({ port: 4318, host: "127.0.0.1" });
 ### Use the React hook (bring your own components)
 
 ```tsx
-import { useHarnessSession, createHarnessClient } from "@claude-pty-harness/react";
+import { useHarnessSession, createHarnessClient } from "@petersr/claude-pty-web-harness-react";
 
 // REST client (create/list/kill sessions). baseUrl "" = same-origin.
 const client = createHarnessClient(""); // or "http://localhost:4318"
@@ -144,7 +144,7 @@ uv venv && uv pip install -e .
 
 ```python
 import asyncio
-from claude_pty_harness import ClaudeHarness
+from claude_pty_web_harness import ClaudeHarness
 
 async def main():
     harness = await ClaudeHarness.create(
@@ -176,11 +176,11 @@ ChatEvents are plain dicts with the same (camelCase) keys as the TS protocol.
 ### Run the reference FastAPI server
 
 ```bash
-PORT=4318 uv run uvicorn claude_pty_harness.server:app
-# or: PORT=4318 uv run python -m claude_pty_harness.server
+PORT=4318 uv run uvicorn claude_pty_web_harness.server:app
+# or: PORT=4318 uv run python -m claude_pty_web_harness.server
 ```
 
-Or mount the harness on your own FastAPI app: see `claude_pty_harness/server.py`
+Or mount the harness on your own FastAPI app: see `claude_pty_web_harness/server.py`
 (`lifespan` creates the harness; each route reads `app.state.harness`).
 
 ## The wire protocol
@@ -235,8 +235,8 @@ another project, use a `file:` dependency:
 // consumer package.json
 {
   "dependencies": {
-    "@claude-pty-harness/core": "file:../claude-pty-harness/packages/core",
-    "@claude-pty-harness/protocol": "file:../claude-pty-harness/packages/protocol"
+    "@petersr/claude-pty-web-harness-core": "file:../claude-pty-web-harness/packages/core",
+    "@petersr/claude-pty-web-harness-protocol": "file:../claude-pty-web-harness/packages/protocol"
   }
 }
 ```
@@ -249,14 +249,14 @@ transpiles them. The pupptyeer client is itself a `file:` dependency of `core`.
 ```toml
 # consumer pyproject.toml (uv) - editable, live changes
 [project]
-dependencies = ["claude-pty-harness"]
+dependencies = ["claude-pty-web-harness"]
 
 [tool.uv.sources]
-claude-pty-harness = { path = "../claude-pty-harness/packages/python", editable = true }
+claude-pty-web-harness = { path = "../claude-pty-web-harness/packages/python", editable = true }
 ```
 
 Other options: `pip install -e packages/python`; a PEP 508 file URL
-(`"claude-pty-harness @ file:///abs/path/packages/python"`); a built wheel
+(`"claude-pty-web-harness @ file:///abs/path/packages/python"`); a built wheel
 (`uv build` then `pip install dist/*.whl`); or a git URL with
 `#subdirectory=packages/python`.
 
@@ -276,7 +276,7 @@ Several defaults assume the repos sit side by side:
 ```
 ~/dev/personal/
   pupptyeer/          # pupptyeer (daemon + clients), not published
-  claude-pty-harness/      # this repo
+  claude-pty-web-harness/      # this repo
 ```
 
 If yours differ, set `PUPPTYEER_BIN`, `PUPPTYEER_SOCK`, and `PUPPTYEER_PY_CLIENT`
@@ -284,11 +284,11 @@ If yours differ, set `PUPPTYEER_BIN`, `PUPPTYEER_SOCK`, and `PUPPTYEER_PY_CLIENT
 
 ### pupptyeer is not on npm or PyPI
 
-- **TS**: `@claude-pty-harness/core` depends on the client by path:
+- **TS**: `@petersr/claude-pty-web-harness-core` depends on the client by path:
   `"@petersr/pupptyeer-client": "file:../../../pupptyeer/clients/typescript"`.
   npm symlinks it into `node_modules`.
 - **Python**: the client is a single stdlib file with no packaging, so it can't
-  be a normal dependency. `claude_pty_harness/_pupptyeer.py` inserts its dir onto
+  be a normal dependency. `claude_pty_web_harness/_pupptyeer.py` inserts its dir onto
   `sys.path` and imports it. Default dir is the sibling repo; override with
   `PUPPTYEER_PY_CLIENT=/path/to/pupptyeer/clients/python`.
 

@@ -4,11 +4,11 @@ HTTP/WS protocol as the TS server, so the React frontend works unchanged.
 Two ways to use it:
 
   * Standalone, for local dev:
-      PORT=4318 uvicorn claude_pty_harness.server:app
-      python -m claude_pty_harness.server
+      PORT=4318 uvicorn claude_pty_web_harness.server:app
+      python -m claude_pty_web_harness.server
 
   * Mounted into an existing FastAPI app (e.g. behind your own OIDC auth):
-      from claude_pty_harness.server import include_harness_routes
+      from claude_pty_web_harness.server import include_harness_routes
       include_harness_routes(
           app,
           harness,

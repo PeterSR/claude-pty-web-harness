@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatEvent, SessionStatus } from "@claude-pty-harness/protocol";
+import type { ChatEvent, SessionStatus } from "@petersr/claude-pty-web-harness-protocol";
 import { ChatMessage } from "./ChatMessage";
 
 export function ChatWindow({

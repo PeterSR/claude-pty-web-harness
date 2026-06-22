@@ -5,7 +5,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
-import type { ChatEvent } from "@claude-pty-harness/protocol";
+import type { ChatEvent } from "@petersr/claude-pty-web-harness-protocol";
 
 /**
  * Find the JSONL file Claude writes for a given session id. Claude encodes the

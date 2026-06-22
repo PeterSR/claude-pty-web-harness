@@ -12,8 +12,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@claude-pty-harness/react": src("../react/src/index.ts"),
-      "@claude-pty-harness/protocol": src("../protocol/src/index.ts"),
+      "@petersr/claude-pty-web-harness-react": src("../react/src/index.ts"),
+      "@petersr/claude-pty-web-harness-protocol": src("../protocol/src/index.ts"),
     },
   },
   server: {

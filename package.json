@@ -1,5 +1,5 @@
 {
-  "name": "claude-pty-harness",
+  "name": "claude-pty-web-harness",
   "version": "0.0.1",
   "private": true,
   "description": "Drive Claude Code in a pty (via pupptyeer) and stream its JSONL transcript into a chat UI. Split into reusable libs.",
@@ -12,8 +12,8 @@
     "packages/app"
   ],
   "scripts": {
-    "dev:server": "npm run dev --workspace @claude-pty-harness/server",
-    "dev:app": "npm run dev --workspace @claude-pty-harness/app",
+    "dev:server": "npm run dev --workspace @petersr/claude-pty-web-harness-server",
+    "dev:app": "npm run dev --workspace @petersr/claude-pty-web-harness-app",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present"
   },

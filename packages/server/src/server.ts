@@ -2,7 +2,7 @@
 // This is the demo's transport; a real app would call registerHarnessRoutes on
 // its own Fastify instance (see ./index.ts).
 import Fastify from "fastify";
-import { ClaudeHarness } from "@claude-pty-harness/core";
+import { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
 import { registerHarnessRoutes } from "./index.js";
 
 const PORT = Number(process.env.PORT ?? 4318);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChatWindow } from "./components/ChatWindow";
-import { useHarnessSession, createHarnessClient } from "@claude-pty-harness/react";
-import type { SessionSummary } from "@claude-pty-harness/protocol";
+import { useHarnessSession, createHarnessClient } from "@petersr/claude-pty-web-harness-react";
+import type { SessionSummary } from "@petersr/claude-pty-web-harness-protocol";
 
 const DEFAULT_CWD = "";
 const MODELS = ["", "sonnet", "opus", "haiku"];

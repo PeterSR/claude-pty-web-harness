@@ -1,4 +1,4 @@
-"""claude_pty_harness: Python backend parity for claude-pty-harness.
+"""claude_pty_web_harness: Python backend parity for claude-pty-web-harness.
 
 Drive Claude Code in a pupptyeer pty and stream its JSONL transcript over the
 same HTTP/WS protocol as the TS server. The reusable core is ClaudeHarness;

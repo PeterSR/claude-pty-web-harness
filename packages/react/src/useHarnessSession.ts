@@ -3,7 +3,7 @@
 // returned `events` however you like.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createHarnessClient } from "./api";
-import type { ChatEvent, ClientMessage, ServerMessage, SessionStatus } from "@claude-pty-harness/protocol";
+import type { ChatEvent, ClientMessage, ServerMessage, SessionStatus } from "@petersr/claude-pty-web-harness-protocol";
 
 export interface UseHarnessSessionOptions {
   /** Harness server origin. Empty = same-origin (e.g. behind a dev proxy). */

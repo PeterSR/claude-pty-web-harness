@@ -7,7 +7,7 @@ import { PupptyeerClient } from "pupptyeer-client";
 import type { Screen } from "pupptyeer-client";
 import { JsonlTailer } from "./jsonl.js";
 import { readyForInput, hasInputPrompt, hasBypassWarning, hasTrustModal, hasStylePicker, isReadyFooter } from "./detect.js";
-import type { ChatEvent, SessionStatus, SessionSummary } from "@claude-pty-harness/protocol";
+import type { ChatEvent, SessionStatus, SessionSummary } from "@petersr/claude-pty-web-harness-protocol";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -16,7 +16,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * other apps sharing the global daemon (TS and Python share this app, so they
  * share the namespace). See .agent-workspace/pupptyeer-namespaces-plan.md.
  */
-export const HARNESS_NAMESPACE = "claude-pty-harness";
+export const HARNESS_NAMESPACE = "claude-pty-web-harness";
 
 // Bracketed-paste markers. Wrapping prompt text in these makes the TUI insert it
 // literally (newlines and all) instead of submitting at the first newline, the

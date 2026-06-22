@@ -1,5 +1,5 @@
-// Public surface of @claude-pty-harness/core: the transport-agnostic logic.
-// Wire it to any transport (the reference @claude-pty-harness/server, an
+// Public surface of @petersr/claude-pty-web-harness-core: the transport-agnostic logic.
+// Wire it to any transport (the reference @petersr/claude-pty-web-harness-server, an
 // Electron main process, SSE, raw IPC, ...) by listening to the harness
 // "chat"/"status" events and calling its imperative methods.
 export { ClaudeHarness, HARNESS_NAMESPACE } from "./harness.js";
@@ -14,4 +14,4 @@ export type {
   SessionSummary,
   ServerMessage,
   ClientMessage,
-} from "@claude-pty-harness/protocol";
+} from "@petersr/claude-pty-web-harness-protocol";

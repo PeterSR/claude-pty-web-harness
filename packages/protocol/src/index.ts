@@ -1,4 +1,4 @@
-// @claude-pty-harness/protocol: the shared wire contract between the core/server
+// @petersr/claude-pty-web-harness-protocol: the shared wire contract between the core/server
 // and any client (the React hook, or a completely different UI). Types only,
 // zero runtime, so every consumer agrees on one ChatEvent/Server/Client shape.
 

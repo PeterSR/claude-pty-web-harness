@@ -1,6 +1,6 @@
-// Transport client for a claude-pty-harness server. baseUrl is injectable so
+// Transport client for a claude-pty-web-harness server. baseUrl is injectable so
 // the same hook works same-origin (Vite proxy), cross-origin, or in Electron.
-import type { SessionSummary } from "@claude-pty-harness/protocol";
+import type { SessionSummary } from "@petersr/claude-pty-web-harness-protocol";
 
 export interface HarnessClient {
   createSession(cwd: string, model?: string): Promise<SessionSummary>;

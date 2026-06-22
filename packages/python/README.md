@@ -1,4 +1,4 @@
-# claude-pty-harness (Python backend)
+# claude-pty-web-harness (Python backend)
 
 A Python parity of the backend: drive Claude Code in a pupptyeer pty and stream
 its JSONL transcript over the **same HTTP/WS protocol** as the TS server, so the
@@ -8,10 +8,10 @@ Mirrors the TS packages:
 
 | Python module | TS equivalent | Role |
 |---|---|---|
-| `claude_pty_harness.protocol` | `@…/protocol` | wire types (ChatEvent, summaries, messages) |
-| `claude_pty_harness.harness` (`ClaudeHarness`) | `@…/core` | transport-agnostic logic (pupptyeer + JSONL + daemon-rendered modal/readiness detection) |
-| `claude_pty_harness.{detect,jsonl,daemon}` | `core/src/*` | supporting modules |
-| `claude_pty_harness.server` | `@…/server` | reference FastAPI + WebSocket adapter |
+| `claude_pty_web_harness.protocol` | `@…/protocol` | wire types (ChatEvent, summaries, messages) |
+| `claude_pty_web_harness.harness` (`ClaudeHarness`) | `@…/core` | transport-agnostic logic (pupptyeer + JSONL + daemon-rendered modal/readiness detection) |
+| `claude_pty_web_harness.{detect,jsonl,daemon}` | `core/src/*` | supporting modules |
+| `claude_pty_web_harness.server` | `@…/server` | reference FastAPI + WebSocket adapter |
 
 It wraps the stdlib-only pupptyeer Python client, installed from PyPI as
 `pupptyeer-client` (a declared dependency). For local development against a
@@ -27,8 +27,8 @@ event loop never blocks.
 ```bash
 cd packages/python
 uv venv && uv pip install -e .
-PORT=4318 uv run uvicorn claude_pty_harness.server:app
-# or: PORT=4318 uv run python -m claude_pty_harness.server
+PORT=4318 uv run uvicorn claude_pty_web_harness.server:app
+# or: PORT=4318 uv run python -m claude_pty_web_harness.server
 ```
 
 It serves the identical API on `:4318`, so `npm run dev:app` (the React app,
@@ -42,7 +42,7 @@ without working capture), `PUPPTYEER_PY_CLIENT`.
 ## Reusing the core (any transport)
 
 ```python
-from claude_pty_harness import ClaudeHarness
+from claude_pty_web_harness import ClaudeHarness
 
 harness = await ClaudeHarness.create(
     pupptyeer_bin="/path/to/pupptyeer",
@@ -68,8 +68,8 @@ separately (browsers can't set an `Authorization` header on a WS).
 
 ```python
 from fastapi import Depends, WebSocket
-from claude_pty_harness import ClaudeHarness
-from claude_pty_harness.server import include_harness_routes
+from claude_pty_web_harness import ClaudeHarness
+from claude_pty_web_harness.server import include_harness_routes
 
 harness = await ClaudeHarness.create(allowed_roots=["/home/me/dev"])
 

@@ -1,4 +1,4 @@
-# claude-pty-harness
+# claude-pty-web-harness
 
 Drive the interactive **Claude Code** TUI inside a pseudo-terminal and stream its
 transcript into a chat UI. It launches `claude` via
@@ -26,11 +26,11 @@ The reuse surface is `protocol` + `core` (backend) and `protocol` + `react`
 
 | Package | What it is | Depends on |
 |---|---|---|
-| `@claude-pty-harness/protocol` | Wire types (`ChatEvent`, `Server/ClientMessage`, ...). Zero runtime. | none |
-| `@claude-pty-harness/core` | `ClaudeHarness`: transport-agnostic logic (pupptyeer + JSONL + VT modal handling). | pupptyeer, @xterm/headless |
-| `@claude-pty-harness/server` | Reference Fastify/WS adapter (`registerHarnessRoutes`) + runnable entry. | core |
-| `@claude-pty-harness/react` | Headless `useHarnessSession` hook + `createHarnessClient`. No UI. | protocol, react |
-| `@claude-pty-harness/app` | The reference chat UI (POC), built on the libs. | react |
+| `@petersr/claude-pty-web-harness-protocol` | Wire types (`ChatEvent`, `Server/ClientMessage`, ...). Zero runtime. | none |
+| `@petersr/claude-pty-web-harness-core` | `ClaudeHarness`: transport-agnostic logic (pupptyeer + JSONL + VT modal handling). | pupptyeer, @xterm/headless |
+| `@petersr/claude-pty-web-harness-server` | Reference Fastify/WS adapter (`registerHarnessRoutes`) + runnable entry. | core |
+| `@petersr/claude-pty-web-harness-react` | Headless `useHarnessSession` hook + `createHarnessClient`. No UI. | protocol, react |
+| `@petersr/claude-pty-web-harness-app` | The reference chat UI (POC), built on the libs. | react |
 
 ## Prerequisites
 
@@ -47,8 +47,8 @@ The pupptyeer Node client is the `pupptyeer-client` npm package (a dependency of
 
 ```bash
 npm install
-npm run dev:server     # @claude-pty-harness/server on :4318
-npm run dev:app        # @claude-pty-harness/app on :4316 (proxies /api + ws to :4318)
+npm run dev:server     # @petersr/claude-pty-web-harness-server on :4318
+npm run dev:app        # @petersr/claude-pty-web-harness-app on :4316 (proxies /api + ws to :4318)
 ```
 
 Open http://localhost:4316, set a working directory, click **New session**, chat.
@@ -59,7 +59,7 @@ Sessions launch with `--permission-mode bypassPermissions` by default.
 **Backend** (any transport, not just Fastify):
 
 ```ts
-import { ClaudeHarness } from "@claude-pty-harness/core";
+import { ClaudeHarness } from "@petersr/claude-pty-web-harness-core";
 
 const harness = await ClaudeHarness.create({
   pupptyeerBin: "/path/to/pupptyeer",
@@ -89,16 +89,16 @@ short-lived ticket / query token there). `/health` stays open.
 **Frontend** (bring your own components):
 
 ```tsx
-import { useHarnessSession } from "@claude-pty-harness/react";
+import { useHarnessSession } from "@petersr/claude-pty-web-harness-react";
 
 const { events, status, sendPrompt, interrupt } = useHarnessSession(sessionId, {
   baseUrl: "http://localhost:4318", // omit for same-origin
 });
-// render `events` (typed by @claude-pty-harness/protocol) however you want
+// render `events` (typed by @petersr/claude-pty-web-harness-protocol) however you want
 ```
 
 A non-React or non-JS UI can skip `react` entirely and speak the
-`@claude-pty-harness/protocol` JSON over the same WebSocket.
+`@petersr/claude-pty-web-harness-protocol` JSON over the same WebSocket.
 
 ## How the startup modals are handled
 
