@@ -57,10 +57,10 @@ Client -> server (`ClientMessage`):
 { id, ptyId, cwd, model?, status, error?, createdAt }
 ```
 
-- `id` — Claude's own session id (the `--session-id` the harness generated; it
+- `id`: Claude's own session id (the `--session-id` the harness generated; it
   names the JSONL transcript file).
-- `ptyId` — pupptyeer's pty session id.
-- `error` — present only when `status` is `"failed"` (a `StartupFailure`).
+- `ptyId`: pupptyeer's pty session id.
+- `error`: present only when `status` is `"failed"` (a `StartupFailure`).
 
 ### SessionStatus
 
@@ -68,10 +68,10 @@ Client -> server (`ClientMessage`):
 "starting" | "ready" | "exited" | "failed"
 ```
 
-- `starting` — launched, driving past the startup modals.
-- `ready` — the input prompt is live and accepting prompts.
-- `exited` — the claude process is gone (killed or ended).
-- `failed` — startup never reached the input prompt; `SessionSummary.error`
+- `starting`: launched, driving past the startup modals.
+- `ready`: the input prompt is live and accepting prompts.
+- `exited`: the claude process is gone (killed or ended).
+- `failed`: startup never reached the input prompt; `SessionSummary.error`
   carries the reason.
 
 ### StartupFailure

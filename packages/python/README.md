@@ -53,7 +53,7 @@ remove = harness.add_listener(lambda kind, sid, payload: ...)  # "chat" | "statu
 summary = await harness.create_session(cwd="/repo", model="sonnet")
 await harness.send_prompt(summary["id"], "first line\nsecond line")  # multi-line, one paste
 # also: harness.list(), harness.get(id), harness.transcript(id),
-#       harness.interrupt(id), await harness.kill(id)
+#       await harness.interrupt(id), await harness.kill(id)
 ```
 
 `create_session` also takes `command`, `permission_mode`, and `extra_args`.

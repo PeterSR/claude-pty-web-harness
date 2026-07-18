@@ -36,7 +36,7 @@ The reuse surface is `protocol` + `core` (backend) and `protocol` + `react`
 |---|---|---|
 | `@petersr/claude-pty-web-harness-protocol` | Wire types (`ChatEvent`, `Server/ClientMessage`, ...). Zero runtime. | none |
 | `@petersr/claude-pty-web-harness-core` | `ClaudeHarness`: transport-agnostic logic (pupptyeer + JSONL + VT modal handling). | pupptyeer-client |
-| `@petersr/claude-pty-web-harness-server` | Reference Fastify/WS adapter (`registerHarnessRoutes`) + runnable entry. | core |
+| `@petersr/claude-pty-web-harness-server` | Reference Fastify/WS adapter (`registerHarnessRoutes`) + runnable entry. | core, protocol |
 | `@petersr/claude-pty-web-harness-react` | Headless `useHarnessSession` hook + `createHarnessClient`. No UI. | protocol, react |
 | `@petersr/claude-pty-web-harness-app` | The reference chat UI (POC), built on the libs. | react |
 
@@ -122,7 +122,7 @@ without sending).
 
 To embed the reference HTTP/WS API on your own Fastify app:
 `registerHarnessRoutes(app, harness, { prefix: "/api" })`. It accepts auth hooks
-so you can put it behind your app's auth — `authenticate(req)` guards the REST
+so you can put it behind your app's auth: `authenticate(req)` guards the REST
 routes (401 on false) and `authenticateWs(req)` guards the WebSocket upgrade
 (browsers can't send an `Authorization` header on a WS, so validate a
 short-lived ticket / query token there). `/health` stays open.
@@ -186,14 +186,29 @@ input prompt. A `failed` status carries a machine reason in `error`
 wall, a usage limit, an unaccepted trust modal) surfaces *why* instead of hanging
 in `starting`.
 
+## Security
+
+The reference servers (TS and Python) are development tools with **no
+authentication**. They bind `127.0.0.1` by default, and sessions default to
+`permissionMode "bypassPermissions"`, so a spawned `claude` runs without tool
+approval prompts in any `cwd` a client requests. Never expose them beyond
+localhost as-is. Before any wider exposure, set `authenticate` / `authenticateWs`
+and `allowedRoots` (Python: `authenticate_ws` / `allowed_roots`) and consider a
+stricter permission mode.
+
 ## Related projects
 
-- [pupptyeer](https://github.com/PeterSR/pupptyeer) — the local PTY
-  session-manager daemon this harness drives (`@petersr/pupptyeer` on npm,
-  `pupptyeer-client` on npm and PyPI).
-- [claude-p](https://github.com/PeterSR/claude-p) — a Go drop-in for
-  `claude -p`; the startup readiness and failure-classification logic here is a
-  port of its interactive driver.
+Both siblings are MIT-licensed FOSS and already published:
+
+- [pupptyeer](https://github.com/PeterSR/pupptyeer): the local PTY
+  session-manager daemon this harness drives. Prebuilt daemon + CLI via
+  `npm i -g @petersr/pupptyeer` (or GitHub Releases); client libraries ship as
+  `pupptyeer-client` on npm and PyPI.
+- [claude-p](https://github.com/PeterSR/claude-p): a Go drop-in for `claude -p`
+  built on the interactive TUI, published as a Go module
+  ([pkg.go.dev](https://pkg.go.dev/github.com/PeterSR/claude-p)). The startup
+  readiness and failure-classification logic here is a port of its interactive
+  driver.
 
 ## License
 

@@ -118,6 +118,14 @@ auth: `authenticate(req)` guards the REST routes (401 on false) and
 `Authorization` header on a WS, so validate a short-lived ticket / query token
 there). `/health` stays open.
 
+> **Security.** The reference servers (TS and Python) are development tools with
+> **no authentication**. They bind `127.0.0.1` by default, and sessions default
+> to `permissionMode "bypassPermissions"`, so a spawned `claude` runs without
+> tool approval prompts in any `cwd` a client requests. Never expose them beyond
+> localhost as-is. Before any wider exposure, set `authenticate` /
+> `authenticateWs` and `allowedRoots` (Python: `authenticate_ws` /
+> `allowed_roots`) and consider a stricter permission mode.
+
 ### Use the React hook (bring your own components)
 
 ```tsx
@@ -172,7 +180,7 @@ async def main():
         # command, permission_mode, extra_args, cols, rows
     )
     await harness.send_prompt(session["id"], "first line\nsecond line")  # multi-line, one paste
-    harness.interrupt(session["id"])
+    await harness.interrupt(session["id"])
     harness.list()                       # list[SessionSummary]
     harness.get(session["id"])           # SessionSummary | None
     harness.transcript(session["id"])    # list[ChatEvent]
@@ -337,13 +345,13 @@ If claude never reaches the input prompt, the session does not hang in
 classifies the rendered screen the way [claude-p](https://github.com/PeterSR/claude-p)
 does, fast-failing on terminal surfaces it cannot drive past:
 
-- `auth_blocked` — not logged in / `API Error: 403` / `please run /login`.
-- `rate_limit` — a usage limit was hit before startup finished.
-- `custom_api_key_detected` — the "Detected a custom API key" modal (unset
+- `auth_blocked`: not logged in / `API Error: 403` / `please run /login`.
+- `rate_limit`: a usage limit was hit before startup finished.
+- `custom_api_key_detected`: the "Detected a custom API key" modal (unset
   `ANTHROPIC_API_KEY`/`AUTH_TOKEN`, or accept it).
-- `workspace_trust_blocked` — the trust modal could not be cleared.
-- `tool_approval_blocked` — a permission prompt is waiting.
-- `startup_timeout` — the deadline elapsed with nothing recognizable on screen.
+- `workspace_trust_blocked`: the trust modal could not be cleared.
+- `tool_approval_blocked`: a permission prompt is waiting.
+- `startup_timeout`: the deadline elapsed with nothing recognizable on screen.
 
 The reason rides on `SessionSummary.error` (REST `GET /api/sessions/:id`) and on
 the `{ type: "status", status: "failed", error }` WebSocket frame. In React it is
