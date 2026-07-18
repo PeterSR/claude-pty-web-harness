@@ -213,11 +213,14 @@ WebSocket `/api/sessions/:id/stream`:
 
 - On connect the server sends a `status` message, then replays the transcript as
   `chat` messages, then streams live.
-- Server -> client: `{ type: "status", status }` | `{ type: "chat", event }` | `{ type: "error", message }`
+- Server -> client: `{ type: "status", status, error? }` | `{ type: "chat", event }` | `{ type: "error", message }`
 - Client -> server: `{ type: "prompt", text }` | `{ type: "interrupt" }`
 
-`SessionSummary`: `{ id, ptyId, cwd, model, status, createdAt }`.
-`status`: `"starting" | "ready" | "exited"`.
+`SessionSummary`: `{ id, ptyId, cwd, model, status, error?, createdAt }`.
+`status`: `"starting" | "ready" | "exited" | "failed"`. A `"failed"` session
+never reached the input prompt; `error` then holds a machine reason (a
+`StartupFailure`): `auth_blocked`, `rate_limit`, `workspace_trust_blocked`,
+`tool_approval_blocked`, `custom_api_key_detected`, or `startup_timeout`.
 
 `ChatEvent` (discriminated by `kind`, all carry `id` and optional `ts`):
 
@@ -326,6 +329,26 @@ blind off the rendered grid:
 - **Trust this folder**: confirmed with Enter.
 - If a daemon's capture is unavailable, `READINESS=delay` skips capture entirely
   and marks ready after a short delay (relies on claude's remembered config).
+
+### A stuck startup ends in `failed`, with a reason
+
+If claude never reaches the input prompt, the session does not hang in
+`starting`: it transitions to `failed` and carries a machine reason. The harness
+classifies the rendered screen the way [claude-p](https://github.com/PeterSR/claude-p)
+does, fast-failing on terminal surfaces it cannot drive past:
+
+- `auth_blocked` — not logged in / `API Error: 403` / `please run /login`.
+- `rate_limit` — a usage limit was hit before startup finished.
+- `custom_api_key_detected` — the "Detected a custom API key" modal (unset
+  `ANTHROPIC_API_KEY`/`AUTH_TOKEN`, or accept it).
+- `workspace_trust_blocked` — the trust modal could not be cleared.
+- `tool_approval_blocked` — a permission prompt is waiting.
+- `startup_timeout` — the deadline elapsed with nothing recognizable on screen.
+
+The reason rides on `SessionSummary.error` (REST `GET /api/sessions/:id`) and on
+the `{ type: "status", status: "failed", error }` WebSocket frame. In React it is
+the `error` field returned by `useHarnessSession`. A failed session's pty is left
+alive so you can inspect or `kill()` it; it will not accept prompts.
 
 ### Multi-line prompts
 

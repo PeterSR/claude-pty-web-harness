@@ -1,9 +1,17 @@
 # claude-pty-web-harness
 
+[![CI](https://github.com/PeterSR/claude-pty-web-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/PeterSR/claude-pty-web-harness/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Drive the interactive **Claude Code** TUI inside a pseudo-terminal and stream its
 transcript into a chat UI. It launches `claude` via
 [pupptyeer](https://github.com/PeterSR/pupptyeer), tails the JSONL transcript Claude persists, and
 renders it as chat while the input box drives the same pty.
+
+> Status: **v0, first public release.** Backends in TypeScript and Python speak
+> one HTTP/WS protocol; the libraries publish to npm (`@petersr/`) and PyPI. See
+> [USAGE.md](USAGE.md) for the full API, [PROTOCOL.md](PROTOCOL.md) for the wire
+> spec, and [PUBLISHING.md](PUBLISHING.md) for the release process.
 
 ```
  browser (React chat)  ──HTTP/WS──>  server  ──in-process──>  core (ClaudeHarness)  ──unix socket──>  pupptyeer  ──pty──>  claude
@@ -168,5 +176,25 @@ configurable:
 - `DELETE /api/sessions/:id` → kill
 - `POST   /api/sessions/:id/prompt` `{ text }` → type a prompt
 - `WS     /api/sessions/:id/stream` → replays transcript + status, then streams
-  `{type:"chat",event}` / `{type:"status",status}`; accepts
+  `{type:"chat",event}` / `{type:"status",status,error?}`; accepts
   `{type:"prompt",text}` / `{type:"interrupt"}`.
+
+Session `status` is `starting → ready`, or `failed` if startup never reaches the
+input prompt. A `failed` status carries a machine reason in `error`
+(`auth_blocked`, `rate_limit`, `workspace_trust_blocked`, `tool_approval_blocked`,
+`custom_api_key_detected`, or `startup_timeout`), so a wedged session (an auth
+wall, a usage limit, an unaccepted trust modal) surfaces *why* instead of hanging
+in `starting`.
+
+## Related projects
+
+- [pupptyeer](https://github.com/PeterSR/pupptyeer) — the local PTY
+  session-manager daemon this harness drives (`@petersr/pupptyeer` on npm,
+  `pupptyeer-client` on npm and PyPI).
+- [claude-p](https://github.com/PeterSR/claude-p) — a Go drop-in for
+  `claude -p`; the startup readiness and failure-classification logic here is a
+  port of its interactive driver.
+
+## License
+
+[MIT](LICENSE). © Peter Severin Rasmussen.
