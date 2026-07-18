@@ -11,7 +11,7 @@
     "server",
     "pty"
   ],
-  "author": "Peter Severin Rasmussen",
+  "author": "Peter Severin Rasmussen <git@petersr.com>",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
