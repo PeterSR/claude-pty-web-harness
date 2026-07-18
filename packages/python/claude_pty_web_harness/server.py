@@ -139,12 +139,22 @@ def create_router(
             if kind == "chat":
                 queue.put_nowait({"type": "chat", "event": payload})
             elif kind == "status":
-                queue.put_nowait({"type": "status", "status": payload})
+                # The listener payload is the status string; the failure reason
+                # lives on the summary, so read it back for a "failed" status.
+                msg = {"type": "status", "status": payload}
+                if payload == "failed":
+                    cur = harness.get(sid)
+                    if cur and cur.get("error"):
+                        msg["error"] = cur["error"]
+                queue.put_nowait(msg)
 
         remove = harness.add_listener(on_event)
 
         # Replay status + transcript so a fresh/reconnecting client catches up.
-        await ws.send_json({"type": "status", "status": summary["status"]})
+        status_msg = {"type": "status", "status": summary["status"]}
+        if summary.get("error"):
+            status_msg["error"] = summary["error"]
+        await ws.send_json(status_msg)
         for ev in harness.transcript(session_id):
             await ws.send_json({"type": "chat", "event": ev})
 

@@ -7,7 +7,14 @@ const DEFAULT_CWD = "";
 const MODELS = ["", "sonnet", "opus", "haiku"];
 
 function StatusDot({ status }: { status: SessionSummary["status"] }) {
-  const color = status === "ready" ? "bg-emerald-400" : status === "starting" ? "bg-amber-400" : "bg-slate-500";
+  const color =
+    status === "ready"
+      ? "bg-emerald-400"
+      : status === "starting"
+        ? "bg-amber-400"
+        : status === "failed"
+          ? "bg-red-500"
+          : "bg-slate-500";
   return <span className={`inline-block h-2 w-2 rounded-full ${color}`} />;
 }
 
@@ -129,6 +136,7 @@ export default function App() {
           <ChatWindow
             events={active.events}
             status={active.status}
+            error={active.error}
             connected={active.connected}
             onSend={active.sendPrompt}
             onInterrupt={active.interrupt}

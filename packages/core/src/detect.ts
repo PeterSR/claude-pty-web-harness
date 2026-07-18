@@ -3,6 +3,7 @@
 // terminal emulation to do here, just substring/line checks.
 
 import type { Screen } from "pupptyeer-client";
+import type { StartupFailure } from "@petersr/claude-pty-web-harness-protocol";
 
 const PROMPT = "❯"; // ❯
 
@@ -85,4 +86,41 @@ export function hasStylePicker(text: string): boolean {
 /** Idle footer marker once claude is past startup and ready for input. */
 export function isReadyFooter(text: string): boolean {
   return text.includes("bypass permissions on") || text.includes("? for shortcuts");
+}
+
+/**
+ * A recognizable interactive failure surface, or null. Ported from claude-p's
+ * ClassifyInteractiveFailure: when the input prompt never appears, this reports
+ * *why* (an auth wall, a usage limit, an unaccepted trust/permission modal, or
+ * a custom-API-key prompt) instead of leaving the caller with a blind timeout.
+ * Cheap substring checks over the rendered screen; the input is lower-cased
+ * internally so callers can pass a raw grid join.
+ */
+export function classifyStartupFailure(text: string): StartupFailure | null {
+  const low = text.toLowerCase();
+  if (low.includes("failed to authenticate") || low.includes("api error: 403") || low.includes("please run /login")) {
+    return "auth_blocked";
+  }
+  if (low.includes("hit your limit") || low.includes("approaching usage limit") || low.includes("5-hour limit")) {
+    return "rate_limit";
+  }
+  // Claude pauses on a "Detected a custom API key ... use this API key?" modal
+  // when it sees ANTHROPIC_API_KEY/AUTH_TOKEN in the env and the user chose to
+  // be asked. Surface it so the caller can strip the env or accept the modal.
+  if (low.includes("detected a custom api key")) return "custom_api_key_detected";
+  if (low.includes("do you trust") && low.includes("folder")) return "workspace_trust_blocked";
+  if (low.includes("permission") && (low.includes("allow") || low.includes("deny"))) {
+    return "tool_approval_blocked";
+  }
+  return null;
+}
+
+/**
+ * The subset of failure surfaces that are terminal the moment they appear
+ * during startup: the harness never produces them itself (unlike the trust /
+ * tool-approval modals it drives), so seeing one means fail fast rather than
+ * waiting out the readiness deadline.
+ */
+export function isHardStartupFailure(failure: StartupFailure): boolean {
+  return failure === "auth_blocked" || failure === "rate_limit" || failure === "custom_api_key_detected";
 }

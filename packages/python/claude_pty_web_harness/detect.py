@@ -84,3 +84,47 @@ def has_style_picker(text: str) -> bool:
 def is_ready_footer(text: str) -> bool:
     """Idle footer marker once claude is past startup and ready for input."""
     return "bypass permissions on" in text or "? for shortcuts" in text
+
+
+# Terminal surfaces the harness can never drive past (unlike the trust /
+# tool-approval modals it handles), so seeing one means fail fast.
+_HARD_STARTUP_FAILURES = frozenset(
+    {"auth_blocked", "rate_limit", "custom_api_key_detected"}
+)
+
+
+def classify_startup_failure(text: str) -> Optional[str]:
+    """A recognizable interactive failure surface, or None. Ported from
+    claude-p's ClassifyInteractiveFailure: when the input prompt never appears,
+    report *why* (an auth wall, a usage limit, an unaccepted trust/permission
+    modal, or a custom-API-key prompt) instead of a blind timeout. Cheap
+    substring checks; the input is lower-cased internally so callers can pass a
+    raw grid join. Returns a StartupFailure value."""
+    low = text.lower()
+    if (
+        "failed to authenticate" in low
+        or "api error: 403" in low
+        or "please run /login" in low
+    ):
+        return "auth_blocked"
+    if (
+        "hit your limit" in low
+        or "approaching usage limit" in low
+        or "5-hour limit" in low
+    ):
+        return "rate_limit"
+    # Claude pauses on a "Detected a custom API key ... use this API key?" modal
+    # when it sees ANTHROPIC_API_KEY/AUTH_TOKEN in the env and the user chose to
+    # be asked. Surface it so the caller can strip the env or accept the modal.
+    if "detected a custom api key" in low:
+        return "custom_api_key_detected"
+    if "do you trust" in low and "folder" in low:
+        return "workspace_trust_blocked"
+    if "permission" in low and ("allow" in low or "deny" in low):
+        return "tool_approval_blocked"
+    return None
+
+
+def is_hard_startup_failure(failure: str) -> bool:
+    """True for a failure that is terminal the moment it shows during startup."""
+    return failure in _HARD_STARTUP_FAILURES

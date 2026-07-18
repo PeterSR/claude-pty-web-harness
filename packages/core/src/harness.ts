@@ -6,7 +6,16 @@ import { resolve as resolvePath, sep } from "node:path";
 import { PupptyeerClient } from "pupptyeer-client";
 import type { Screen } from "pupptyeer-client";
 import { JsonlTailer } from "./jsonl.js";
-import { readyForInput, hasInputPrompt, hasBypassWarning, hasTrustModal, hasStylePicker, isReadyFooter } from "./detect.js";
+import {
+  readyForInput,
+  hasInputPrompt,
+  hasBypassWarning,
+  hasTrustModal,
+  hasStylePicker,
+  isReadyFooter,
+  classifyStartupFailure,
+  isHardStartupFailure,
+} from "./detect.js";
 import type { ChatEvent, SessionStatus, SessionSummary } from "@petersr/claude-pty-web-harness-protocol";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -67,6 +76,7 @@ interface Session {
   cwd: string;
   model?: string;
   status: SessionStatus;
+  error?: string; // failure reason when status is "failed"
   createdAt: string;
   tailer: JsonlTailer;
   events: ChatEvent[]; // full transcript for replay
@@ -76,7 +86,8 @@ interface Session {
 /**
  * Emits, per session id:
  *   "chat"   (sessionId, ChatEvent)
- *   "status" (sessionId, SessionStatus)
+ *   "status" (sessionId, SessionStatus, error?) - error is the failure reason
+ *            when status is "failed", otherwise undefined.
  */
 export class ClaudeHarness extends EventEmitter {
   private client!: PupptyeerClient;
@@ -122,7 +133,15 @@ export class ClaudeHarness extends EventEmitter {
   }
 
   private summary(s: Session): SessionSummary {
-    return { id: s.id, ptyId: s.ptyId, cwd: s.cwd, model: s.model, status: s.status, createdAt: s.createdAt };
+    return {
+      id: s.id,
+      ptyId: s.ptyId,
+      cwd: s.cwd,
+      model: s.model,
+      status: s.status,
+      ...(s.error ? { error: s.error } : {}),
+      createdAt: s.createdAt,
+    };
   }
 
   async createSession(opts: CreateSessionOptions): Promise<SessionSummary> {
@@ -241,8 +260,26 @@ export class ClaudeHarness extends EventEmitter {
         return;
       }
 
+      // 4. Fail fast on a terminal surface the harness can't drive past (an auth
+      //    wall, a usage limit, a custom-API-key prompt). Trust / tool-approval
+      //    surfaces are left for the timeout classification below, since those
+      //    can be transiently on screen while the modal handlers above act.
+      const failure = classifyStartupFailure(text);
+      if (failure && isHardStartupFailure(failure)) {
+        this.markFailed(session, failure);
+        return;
+      }
+
       await sleep(200);
     }
+
+    // Deadline elapsed without readiness. Rather than leave the session wedged
+    // in "starting" forever, capture one last frame and say why: a recognized
+    // block (e.g. an unaccepted trust modal) or the generic startup timeout.
+    if (!this.sessions.has(session.id) || session.ready) return;
+    const last = await this.captureScreen(session.ptyId, 300, 1500);
+    const text = last?.lines.join("\n").toLowerCase() ?? "";
+    this.markFailed(session, classifyStartupFailure(text) ?? "startup_timeout");
   }
 
   /**
@@ -269,6 +306,19 @@ export class ClaudeHarness extends EventEmitter {
     session.ready = true;
     session.status = "ready";
     this.emit("status", session.id, "ready");
+  }
+
+  /**
+   * Mark a session that never reached the input prompt as "failed", carrying a
+   * short machine reason (a StartupFailure). No-op once the session is ready,
+   * already failed, or gone. The pty is left alive so the caller can inspect or
+   * kill() it; a failed session is not usable for prompts.
+   */
+  private markFailed(session: Session, reason: string): void {
+    if (!this.sessions.has(session.id) || session.status !== "starting") return;
+    session.status = "failed";
+    session.error = reason;
+    this.emit("status", session.id, "failed", reason);
   }
 
   /**

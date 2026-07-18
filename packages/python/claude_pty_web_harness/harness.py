@@ -44,6 +44,7 @@ class _Session:
     model: Optional[str]
     status: SessionStatus
     created_at: str
+    error: Optional[str] = None  # failure reason when status is "failed"
     events: List[ChatEvent] = field(default_factory=list)
     ready: bool = False
     tasks: List[asyncio.Task] = field(default_factory=list)
@@ -124,7 +125,7 @@ class ClaudeHarness:
         return s.events if s else []
 
     def _summary(self, s: _Session) -> SessionSummary:
-        return {
+        summary: SessionSummary = {
             "id": s.id,
             "ptyId": s.pty_id,
             "cwd": s.cwd,
@@ -132,6 +133,9 @@ class ClaudeHarness:
             "status": s.status,
             "createdAt": s.created_at,
         }
+        if s.error:
+            summary["error"] = s.error
+        return summary
 
     # --- lifecycle --------------------------------------------------------
 
@@ -254,7 +258,26 @@ class ClaudeHarness:
                 self._mark_ready(s)
                 return
 
+            # 4. Fail fast on a terminal surface the harness can't drive past (an
+            #    auth wall, a usage limit, a custom-API-key prompt). Trust /
+            #    tool-approval surfaces are left for the timeout classification
+            #    below, since those can be transiently on screen while the modal
+            #    handlers above act.
+            failure = detect.classify_startup_failure(text)
+            if failure and detect.is_hard_startup_failure(failure):
+                self._mark_failed(s, failure)
+                return
+
             await asyncio.sleep(0.2)
+
+        # Deadline elapsed without readiness. Rather than leave the session
+        # wedged in "starting" forever, capture one last frame and say why: a
+        # recognized block (e.g. an unaccepted trust modal) or a generic timeout.
+        if s.id not in self._sessions or s.ready:
+            return
+        last = await self._capture_screen(s.pty_id, 300, 1500)
+        text = "\n".join(last.lines).lower() if last and last.lines else ""
+        self._mark_failed(s, detect.classify_startup_failure(text) or "startup_timeout")
 
     def _mark_ready(self, s: _Session) -> None:
         if s.ready:
@@ -262,6 +285,20 @@ class ClaudeHarness:
         s.ready = True
         s.status = "ready"
         self._emit("status", s.id, "ready")
+
+    def _mark_failed(self, s: _Session, reason: str) -> None:
+        """Mark a session that never reached the input prompt as "failed",
+        carrying a short machine reason (a StartupFailure). No-op once the
+        session is ready, already failed, or gone. The pty is left alive so the
+        caller can inspect or kill() it; a failed session is not usable."""
+        if s.id not in self._sessions or s.status != "starting":
+            return
+        s.status = "failed"
+        s.error = reason
+        # Listener payload stays the status string (stable 3-arg contract); the
+        # reason rides on the session summary (get()/list()) for the server and
+        # any direct listener to read.
+        self._emit("status", s.id, "failed")
 
     # --- input ------------------------------------------------------------
 

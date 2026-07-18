@@ -77,7 +77,9 @@ export async function registerHarnessRoutes(
   };
 
   harness.on("chat", (sessionId: string, event: ChatEvent) => broadcast(sessionId, { type: "chat", event }));
-  harness.on("status", (sessionId: string, status: SessionStatus) => broadcast(sessionId, { type: "status", status }));
+  harness.on("status", (sessionId: string, status: SessionStatus, error?: string) =>
+    broadcast(sessionId, { type: "status", status, ...(error ? { error } : {}) }),
+  );
 
   app.get(`${prefix}/health`, async () => ({ ok: true }));
 
@@ -153,7 +155,13 @@ export async function registerHarnessRoutes(
     set.add(socket);
 
     // Replay status + transcript so a fresh/reconnecting client catches up.
-    socket.send(JSON.stringify({ type: "status", status: session.status } satisfies ServerMessage));
+    socket.send(
+      JSON.stringify({
+        type: "status",
+        status: session.status,
+        ...(session.error ? { error: session.error } : {}),
+      } satisfies ServerMessage),
+    );
     for (const event of harness.transcript(id)) {
       socket.send(JSON.stringify({ type: "chat", event } satisfies ServerMessage));
     }

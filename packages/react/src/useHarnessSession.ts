@@ -13,6 +13,8 @@ export interface UseHarnessSessionOptions {
 export interface HarnessSession {
   events: ChatEvent[];
   status: SessionStatus;
+  /** Failure reason (a StartupFailure) when status is "failed", else null. */
+  error: string | null;
   connected: boolean;
   sendPrompt: (text: string) => void;
   interrupt: () => void;
@@ -27,6 +29,7 @@ export function useHarnessSession(
 
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [status, setStatus] = useState<SessionStatus>("starting");
+  const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -34,6 +37,7 @@ export function useHarnessSession(
     if (!sessionId) return;
     setEvents([]);
     setStatus("starting");
+    setError(null);
 
     const ws = new WebSocket(client.streamUrl(sessionId));
     wsRef.current = ws;
@@ -50,6 +54,7 @@ export function useHarnessSession(
       }
       if (msg.type === "status") {
         setStatus(msg.status);
+        setError(msg.status === "failed" ? msg.error ?? "startup_timeout" : null);
       } else if (msg.type === "chat") {
         if (seen.has(msg.event.id)) return;
         seen.add(msg.event.id);
@@ -89,5 +94,5 @@ export function useHarnessSession(
 
   const interrupt = useCallback(() => send({ type: "interrupt" }), [send]);
 
-  return { events, status, connected, sendPrompt, interrupt };
+  return { events, status, error, connected, sendPrompt, interrupt };
 }

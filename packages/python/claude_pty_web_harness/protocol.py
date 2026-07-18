@@ -7,7 +7,20 @@ from __future__ import annotations
 
 from typing import Any, List, Literal, TypedDict
 
-SessionStatus = Literal["starting", "ready", "exited"]
+SessionStatus = Literal["starting", "ready", "exited", "failed"]
+
+# Machine-readable reason a session ended up "failed" (surfaced in
+# SessionSummary["error"] and on the "status" wire message). "startup_timeout"
+# is the catch-all when the input prompt never appeared and no known surface was
+# recognized; the rest name a specific interactive block claude showed instead.
+StartupFailure = Literal[
+    "auth_blocked",
+    "rate_limit",
+    "workspace_trust_blocked",
+    "tool_approval_blocked",
+    "custom_api_key_detected",
+    "startup_timeout",
+]
 
 # ChatEvent variants (discriminated by "kind"). All carry id and optional ts.
 #   user           { id, ts?, kind:"user", text }
@@ -26,15 +39,17 @@ class SessionSummary(TypedDict, total=False):
     cwd: str
     model: str | None
     status: SessionStatus
+    # Reason when status is "failed" (a StartupFailure), else absent.
+    error: str
     createdAt: str
 
 
 # Server -> client:
-#   { "type": "status", "status": SessionStatus }
+#   { "type": "status", "status": SessionStatus, "error"?: str }
 #   { "type": "chat", "event": ChatEvent }
 #   { "type": "error", "message": str }
 # Client -> server:
 #   { "type": "prompt", "text": str }
 #   { "type": "interrupt" }
 
-__all__ = ["SessionStatus", "ChatEvent", "SessionSummary"]
+__all__ = ["SessionStatus", "StartupFailure", "ChatEvent", "SessionSummary"]

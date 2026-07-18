@@ -53,5 +53,38 @@ class TestHasStylePicker(unittest.TestCase):
         self.assertFalse(detect.has_style_picker("❯ try something"))
 
 
+class TestClassifyStartupFailure(unittest.TestCase):
+    def test_recognizes_interactive_block_surfaces(self):
+        self.assertIsNone(detect.classify_startup_failure("Welcome back\n❯ "))
+        self.assertEqual(detect.classify_startup_failure("❯ \nfailed to authenticate"), "auth_blocked")
+        self.assertEqual(detect.classify_startup_failure("API Error: 403 Forbidden"), "auth_blocked")
+        self.assertEqual(detect.classify_startup_failure("Please run /login to continue"), "auth_blocked")
+        self.assertEqual(detect.classify_startup_failure("You've hit your limit"), "rate_limit")
+        self.assertEqual(detect.classify_startup_failure("You are approaching usage limit"), "rate_limit")
+        self.assertEqual(
+            detect.classify_startup_failure("Detected a custom API key in your environment"),
+            "custom_api_key_detected",
+        )
+        self.assertEqual(
+            detect.classify_startup_failure("Do you trust the files in this folder?"),
+            "workspace_trust_blocked",
+        )
+        self.assertEqual(
+            detect.classify_startup_failure("Permission required: allow or deny this action?"),
+            "tool_approval_blocked",
+        )
+
+    def test_case_insensitive_over_raw_grid_join(self):
+        self.assertEqual(detect.classify_startup_failure("FAILED TO AUTHENTICATE"), "auth_blocked")
+
+
+class TestIsHardStartupFailure(unittest.TestCase):
+    def test_only_surfaces_the_harness_cannot_drive_past(self):
+        for hard in ("auth_blocked", "rate_limit", "custom_api_key_detected"):
+            self.assertTrue(detect.is_hard_startup_failure(hard))
+        for soft in ("workspace_trust_blocked", "tool_approval_blocked", "startup_timeout"):
+            self.assertFalse(detect.is_hard_startup_failure(soft))
+
+
 if __name__ == "__main__":
     unittest.main()

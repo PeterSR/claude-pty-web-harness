@@ -12,7 +12,29 @@ export type ChatEvent =
   | { id: string; ts?: string; kind: "system"; subtype?: string; text?: string }
   | { id: string; ts?: string; kind: "result"; subtype?: string; durationMs?: number; costUsd?: number; text?: string };
 
-export type SessionStatus = "starting" | "ready" | "exited";
+/**
+ * Session lifecycle:
+ *  - "starting": launched, driving past the startup modals.
+ *  - "ready": input prompt is live and accepting prompts.
+ *  - "exited": the claude process is gone (killed or ended).
+ *  - "failed": startup never reached the input prompt. `SessionSummary.error`
+ *    carries a short machine reason (see StartupFailure below).
+ */
+export type SessionStatus = "starting" | "ready" | "exited" | "failed";
+
+/**
+ * Machine-readable reason a session ended up "failed", surfaced in
+ * `SessionSummary.error` and on the "status" wire message. "startup_timeout" is
+ * the catch-all when the input prompt never appeared and no known surface was
+ * recognized; the rest name a specific interactive block claude showed instead.
+ */
+export type StartupFailure =
+  | "auth_blocked"
+  | "rate_limit"
+  | "workspace_trust_blocked"
+  | "tool_approval_blocked"
+  | "custom_api_key_detected"
+  | "startup_timeout";
 
 export interface SessionSummary {
   /** Claude's own session id (the --session-id we generated; names the JSONL file). */
@@ -22,12 +44,14 @@ export interface SessionSummary {
   cwd: string;
   model?: string;
   status: SessionStatus;
+  /** Reason when status is "failed" (a StartupFailure), else absent. */
+  error?: string;
   createdAt: string;
 }
 
 /** Messages sent server -> client over the WebSocket. */
 export type ServerMessage =
-  | { type: "status"; status: SessionStatus }
+  | { type: "status"; status: SessionStatus; error?: string }
   | { type: "chat"; event: ChatEvent }
   | { type: "error"; message: string };
 

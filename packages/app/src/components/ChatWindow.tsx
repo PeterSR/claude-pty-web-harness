@@ -2,15 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import type { ChatEvent, SessionStatus } from "@petersr/claude-pty-web-harness-protocol";
 import { ChatMessage } from "./ChatMessage";
 
+// Turn a machine failure reason (a StartupFailure) into a human sentence.
+const FAILURE_MESSAGES: Record<string, string> = {
+  auth_blocked: "Claude could not authenticate. Run `claude` once in a terminal to log in, then retry.",
+  rate_limit: "Claude hit a usage limit before it could start. Wait and try again.",
+  workspace_trust_blocked: "Claude's trust prompt for this folder was not accepted.",
+  tool_approval_blocked: "Claude is waiting on a tool-permission prompt it could not clear.",
+  custom_api_key_detected: "Claude paused on a custom-API-key prompt. Unset ANTHROPIC_API_KEY or accept it.",
+  startup_timeout: "Claude never reached its input prompt in time.",
+};
+
 export function ChatWindow({
   events,
   status,
+  error,
   connected,
   onSend,
   onInterrupt,
 }: {
   events: ChatEvent[];
   status: SessionStatus;
+  error?: string | null;
   connected: boolean;
   onSend: (text: string) => void;
   onInterrupt: () => void;
@@ -28,12 +40,24 @@ export function ChatWindow({
     setText("");
   };
 
+  const failed = status === "failed";
+  const failureText = failed ? FAILURE_MESSAGES[error ?? "startup_timeout"] ?? `Startup failed (${error}).` : null;
+
   return (
     <div className="flex h-full flex-col">
+      {failed && (
+        <div className="border-b border-red-900/60 bg-red-950/40 px-4 py-2 text-sm text-red-300">
+          <span className="font-medium">Session failed to start.</span> {failureText}
+        </div>
+      )}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {events.length === 0 && (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
-            {status === "ready" ? "Send a prompt to start." : "Waiting for Claude to start…"}
+            {status === "ready"
+              ? "Send a prompt to start."
+              : failed
+                ? failureText
+                : "Waiting for Claude to start…"}
           </div>
         )}
         {events.map((e) => (
