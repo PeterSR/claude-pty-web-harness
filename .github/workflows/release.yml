@@ -1,0 +1,74 @@
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # npm: the four @petersr/claude-pty-web-harness-* libraries, published in
+  # dependency order (protocol -> core -> react -> server). OIDC trusted
+  # publishing, no stored token. Enable by setting the repo variable
+  # PUBLISH_NPM=1 once each package exists and trusted publishing is configured
+  # on npmjs.com (the very first publish of each is manual; see PUBLISHING.md).
+  publish-npm:
+    if: vars.PUBLISH_NPM == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Use npm with trusted publishing support (OIDC needs npm >= 11.5)
+        run: npm i -g npm@latest
+      - name: Install and build libraries
+        run: |
+          npm ci
+          npm run build:libs
+      - name: Set versions from the tag (lockstep)
+        run: node scripts/version.mjs "${GITHUB_REF_NAME#v}"
+      - name: Publish in dependency order
+        run: |
+          for pkg in protocol core react server; do
+            npm publish --provenance --access public \
+              --workspace "@petersr/claude-pty-web-harness-$pkg"
+          done
+
+  # PyPI: the claude-pty-web-harness Python package. OIDC trusted publishing;
+  # PyPI supports a *pending* publisher, so this works from the very first tag
+  # once configured. Enable by setting the repo variable PUBLISH_PYPI=1
+  # (see PUBLISHING.md).
+  publish-pypi:
+    if: vars.PUBLISH_PYPI == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify pyproject version matches the tag
+        working-directory: packages/python
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          GOT="$(python -c 'import re,pathlib; print(re.search(r"^version = \"([^\"]+)\"", pathlib.Path("pyproject.toml").read_text(), re.M).group(1))')"
+          if [ "$VER" != "$GOT" ]; then
+            echo "tag $VER != pyproject version $GOT (run scripts/version.mjs before tagging)" >&2
+            exit 1
+          fi
+      - name: Build sdist + wheel
+        working-directory: packages/python
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          packages-dir: packages/python/dist
