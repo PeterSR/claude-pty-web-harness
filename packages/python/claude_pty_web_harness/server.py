@@ -30,7 +30,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Optional, Sequence, Union
 
-from fastapi import APIRouter, Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse
 
 from .harness import ClaudeHarness
@@ -46,6 +46,16 @@ def _resolver(source: HarnessSource) -> Callable[[], ClaudeHarness]:
     if isinstance(source, ClaudeHarness):
         return lambda: source
     return source  # already a callable
+
+
+async def _read_json_object(request: Request) -> Optional[dict]:
+    """Parse a JSON request body, returning the dict or None for malformed JSON
+    or a non-object body. Callers turn None into a clean 400."""
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        return None
+    return body if isinstance(body, dict) else None
 
 
 def create_router(
@@ -76,7 +86,9 @@ def create_router(
 
     @router.post(f"{prefix}/sessions", dependencies=dep)
     async def create_session(request: Request):
-        body = await request.json()
+        body = await _read_json_object(request)
+        if body is None:
+            return JSONResponse({"error": "invalid JSON body"}, status_code=400)
         cwd = (body.get("cwd") or "").strip()
         if not cwd:
             return JSONResponse({"error": "cwd is required"}, status_code=400)
@@ -101,7 +113,9 @@ def create_router(
 
     @router.post(f"{prefix}/sessions/{{session_id}}/prompt", dependencies=dep)
     async def prompt(session_id: str, request: Request):
-        body = await request.json()
+        body = await _read_json_object(request)
+        if body is None:
+            return JSONResponse({"error": "invalid JSON body"}, status_code=400)
         if not body.get("text"):
             return JSONResponse({"error": "text is required"}, status_code=400)
         try:
@@ -148,15 +162,17 @@ def create_router(
                         msg["error"] = cur["error"]
                 queue.put_nowait(msg)
 
+        # Snapshot the transcript and register the listener as adjacent
+        # synchronous statements (no await between them): everything up to the
+        # snapshot is replayed below, everything after goes to the queue, and
+        # with no suspension point in between nothing is lost or duplicated.
+        # Re-read the summary here too so the replayed status matches this point.
+        snapshot = list(harness.transcript(session_id))
         remove = harness.add_listener(on_event)
-
-        # Replay status + transcript so a fresh/reconnecting client catches up.
-        status_msg = {"type": "status", "status": summary["status"]}
-        if summary.get("error"):
-            status_msg["error"] = summary["error"]
-        await ws.send_json(status_msg)
-        for ev in harness.transcript(session_id):
-            await ws.send_json({"type": "chat", "event": ev})
+        current = harness.get(session_id) or summary
+        status_msg = {"type": "status", "status": current["status"]}
+        if current.get("error"):
+            status_msg["error"] = current["error"]
 
         async def outbound():
             while True:
@@ -165,22 +181,41 @@ def create_router(
         async def inbound():
             while True:
                 data = await ws.receive_json()
+                if not isinstance(data, dict):
+                    continue
                 t = data.get("type")
                 if t == "prompt":
-                    asyncio.create_task(harness.send_prompt(session_id, data.get("text", "")))
+                    # Fire-and-forget, but consume the task's exception so a
+                    # failing send doesn't log an unretrieved-exception
+                    # traceback (mirrors the TS server's .catch(() => {})).
+                    task = asyncio.create_task(harness.send_prompt(session_id, data.get("text", "")))
+                    task.add_done_callback(lambda done: done.cancelled() or done.exception())
                 elif t == "interrupt":
-                    harness.interrupt(session_id)
+                    await harness.interrupt(session_id)
 
-        out_task = asyncio.create_task(outbound())
-        in_task = asyncio.create_task(inbound())
+        # Everything from here awaits, so it lives under try/finally: a client
+        # dropping mid-replay must still remove the listener (else it and its
+        # queue leak forever). The pump tasks start only after the replay so
+        # queued live events can't overtake the replayed transcript.
+        out_task = in_task = None
         try:
+            await ws.send_json(status_msg)
+            for ev in snapshot:
+                await ws.send_json({"type": "chat", "event": ev})
+
+            out_task = asyncio.create_task(outbound())
+            in_task = asyncio.create_task(inbound())
             await asyncio.wait({out_task, in_task}, return_when=asyncio.FIRST_COMPLETED)
-        except WebSocketDisconnect:
-            pass
         finally:
             remove()
-            out_task.cancel()
-            in_task.cancel()
+            # asyncio.wait never re-raises task exceptions, so gather the
+            # cancelled tasks with return_exceptions to consume any (e.g. a
+            # WebSocketDisconnect) instead of letting them log as unretrieved.
+            tasks = [t for t in (out_task, in_task) if t is not None]
+            for t in tasks:
+                t.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     return router
 

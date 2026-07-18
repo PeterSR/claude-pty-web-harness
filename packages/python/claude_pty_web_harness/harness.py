@@ -168,7 +168,9 @@ class ClaudeHarness:
             cwd=cwd,
             model=model,
             status="starting",
-            created_at=datetime.now(timezone.utc).isoformat(),
+            # Match the TS core's Date.toISOString(): millisecond precision and
+            # a trailing "Z" rather than Python's default "+00:00" offset.
+            created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         )
         self._sessions[session_id] = s
 
@@ -229,7 +231,7 @@ class ClaudeHarness:
             #    default with Enter.
             if not style_handled and detect.has_style_picker(text):
                 style_handled = True
-                self._client.write_pane(s.pty_id, "\r")
+                await asyncio.to_thread(self._client.write_pane, s.pty_id, "\r")
                 await asyncio.sleep(0.4)
                 continue
 
@@ -238,16 +240,16 @@ class ClaudeHarness:
             #    then confirm.
             if not bypass_accepted and detect.has_bypass_warning(text):
                 bypass_accepted = True
-                self._client.write_pane(s.pty_id, b"\x1b[B")  # Down
+                await asyncio.to_thread(self._client.write_pane, s.pty_id, b"\x1b[B")  # Down
                 await asyncio.sleep(0.25)
-                self._client.write_pane(s.pty_id, "\r")
+                await asyncio.to_thread(self._client.write_pane, s.pty_id, "\r")
                 await asyncio.sleep(0.4)
                 continue
 
             # 2. "Do you trust the files in this folder?" modal (default = yes).
             if not trust_handled and detect.has_trust_modal(text):
                 trust_handled = True
-                self._client.write_pane(s.pty_id, "\r")
+                await asyncio.to_thread(self._client.write_pane, s.pty_id, "\r")
                 await asyncio.sleep(0.4)
                 continue
 
@@ -295,6 +297,14 @@ class ClaudeHarness:
             return
         s.status = "failed"
         s.error = reason
+        # A failed session never produces a transcript, so stop its JSONL tailer
+        # from polling forever; the pty is left alive (see docstring). Don't
+        # cancel the task we're running inside: _mark_failed is called from the
+        # _drive_startup task, itself tracked in s.tasks.
+        current = asyncio.current_task()
+        for t in s.tasks:
+            if t is not current:
+                t.cancel()
         # Listener payload stays the status string (stable 3-arg contract); the
         # reason rides on the session summary (get()/list()) for the server and
         # any direct listener to read.
@@ -312,16 +322,16 @@ class ClaudeHarness:
         normalized = text.replace("\r\n", "\n").replace("\r", "\n")
         # Inside a paste the TUI treats CR as a literal newline, not a submit.
         paste = _PASTE_START + normalized.replace("\n", "\r").encode() + _PASTE_END
-        self._client.write_pane(s.pty_id, paste)
+        await asyncio.to_thread(self._client.write_pane, s.pty_id, paste)
         if submit:
             await asyncio.sleep(0.12)
-            self._client.write_pane(s.pty_id, "\r")
+            await asyncio.to_thread(self._client.write_pane, s.pty_id, "\r")
 
-    def interrupt(self, session_id: str) -> None:
+    async def interrupt(self, session_id: str) -> None:
         s = self._sessions.get(session_id)
         if not s:
             return
-        self._client.write_pane(s.pty_id, b"\x03")  # Ctrl-C
+        await asyncio.to_thread(self._client.write_pane, s.pty_id, b"\x03")  # Ctrl-C
 
     async def kill(self, session_id: str) -> None:
         s = self._sessions.pop(session_id, None)
@@ -329,6 +339,9 @@ class ClaudeHarness:
             return
         for t in s.tasks:
             t.cancel()
+        # Await the cancelled tasks so they finish unwinding instead of
+        # surfacing "Task was destroyed but it is pending" warnings.
+        await asyncio.gather(*s.tasks, return_exceptions=True)
         try:
             await asyncio.to_thread(self._client.kill, s.pty_id)
         except Exception:
