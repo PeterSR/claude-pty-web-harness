@@ -164,8 +164,10 @@ export class JsonlTailer extends EventEmitter {
   private partial = "";
   private lineNo = 0;
   private filePath: string | null = null;
+  private prevPath: string | null = null;
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
+  private inFlight = false;
 
   constructor(private readonly sessionId: string, private readonly intervalMs = 200) {
     super();
@@ -183,11 +185,25 @@ export class JsonlTailer extends EventEmitter {
   }
 
   private async tick(): Promise<void> {
-    if (this.stopped) return;
+    // Ticks are async and fire on a fixed interval; without this guard a slow
+    // read would overlap the next tick, re-reading the same byte range and
+    // corrupting this.partial. Skip if a tick is already running.
+    if (this.stopped || this.inFlight) return;
+    this.inFlight = true;
     try {
       if (!this.filePath) {
-        this.filePath = await findJsonlPath(this.sessionId);
-        if (!this.filePath) return;
+        const found = await findJsonlPath(this.sessionId);
+        if (!found) return;
+        // A re-discovered path that differs from the last one (a rotated or
+        // relocated file) must not inherit the previous file's read position,
+        // or offset/partial/lineNo would corrupt parsing of the new file.
+        if (this.prevPath && found !== this.prevPath) {
+          this.offset = 0;
+          this.partial = "";
+          this.lineNo = 0;
+        }
+        this.filePath = found;
+        this.prevPath = found;
         this.emit("file", this.filePath);
       }
       const st = await fsp.stat(this.filePath);
@@ -218,6 +234,8 @@ export class JsonlTailer extends EventEmitter {
     } catch (err) {
       // file vanished or transient error; reset discovery
       this.filePath = null;
+    } finally {
+      this.inFlight = false;
     }
   }
 }

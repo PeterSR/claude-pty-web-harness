@@ -26,6 +26,14 @@ export function createHarnessClient(baseUrl = ""): HarnessClient {
     return res.json();
   };
 
+  // Throw on a non-2xx response for endpoints whose body we don't need.
+  const ensureOk = async (res: Response) => {
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `HTTP ${res.status}`);
+    }
+  };
+
   return {
     createSession: (cwd, model) =>
       fetch(url("/api/sessions"), {
@@ -35,17 +43,25 @@ export function createHarnessClient(baseUrl = ""): HarnessClient {
       }).then(json),
     listSessions: () => fetch(url("/api/sessions")).then(json),
     killSession: async (id) => {
-      await fetch(url(`/api/sessions/${id}`), { method: "DELETE" });
+      await fetch(url(`/api/sessions/${id}`), { method: "DELETE" }).then(ensureOk);
     },
     sendPrompt: async (id, text) => {
       await fetch(url(`/api/sessions/${id}/prompt`), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text }),
-      });
+      }).then(ensureOk);
     },
     streamUrl: (id) => {
       const origin = baseUrl || (typeof location !== "undefined" ? location.origin : "");
+      // A relative URL can't open a WebSocket, so fail loud instead of returning
+      // one. This bites in SSR (no location) or with a non-http base URL.
+      if (!origin) {
+        throw new Error("streamUrl: no origin (SSR without a baseUrl); pass an explicit http(s) baseUrl");
+      }
+      if (!/^https?:\/\//.test(origin)) {
+        throw new Error(`streamUrl: baseUrl must start with http:// or https:// (got "${origin}")`);
+      }
       const wsBase = origin.replace(/^http/, "ws");
       return `${wsBase}/api/sessions/${id}/stream`;
     },

@@ -96,7 +96,8 @@ export async function registerHarnessRoutes(
       return await harness.createSession({ cwd, model: body.model });
     } catch (err) {
       req.log.error(err);
-      reply.code(500);
+      // A cwd outside allowedRoots is a client error (403); anything else is 500.
+      reply.code((err as { code?: string }).code === "cwd_not_allowed" ? 403 : 500);
       return { error: String((err as Error).message ?? err) };
     }
   });
@@ -114,6 +115,8 @@ export async function registerHarnessRoutes(
   app.delete(`${prefix}/sessions/:id`, guarded, async (req) => {
     const { id } = req.params as { id: string };
     await harness.kill(id);
+    // Drop the subscriber set so killed sessions don't leave empty sets behind.
+    subscribers.delete(id);
     return { ok: true };
   });
 
@@ -174,12 +177,22 @@ export async function registerHarnessRoutes(
         return;
       }
       if (msg.type === "prompt") {
+        if (typeof msg.text !== "string") {
+          socket.send(
+            JSON.stringify({ type: "error", message: "prompt text must be a string" } satisfies ServerMessage),
+          );
+          return;
+        }
         harness.sendPrompt(id, msg.text).catch(() => {});
       } else if (msg.type === "interrupt") {
         harness.interrupt(id);
       }
     });
 
-    socket.on("close", () => set?.delete(socket));
+    socket.on("close", () => {
+      set?.delete(socket);
+      // Drop the set once its last socket closes so empty sets don't accumulate.
+      if (set && set.size === 0 && subscribers.get(id) === set) subscribers.delete(id);
+    });
   });
 }

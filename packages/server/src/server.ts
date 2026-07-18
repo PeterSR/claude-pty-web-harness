@@ -9,6 +9,11 @@ import { registerHarnessRoutes } from "./index.js";
 const PORT = Number(process.env.PORT ?? 4318);
 const HOST = process.env.HOST ?? "127.0.0.1";
 
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  console.error(`[server] invalid PORT ${JSON.stringify(process.env.PORT)}; must be an integer 1-65535`);
+  process.exit(1);
+}
+
 // "screen" (default) uses the daemon's rendered grid; "delay" avoids capture
 // (set READINESS=delay if the daemon's capture wedges claude).
 const readiness = process.env.READINESS === "delay" ? "delay" : "screen";
@@ -21,6 +26,11 @@ const harness = await ClaudeHarness.create({ readiness });
 const app = Fastify({ logger: false });
 await registerHarnessRoutes(app, harness);
 
-app.listen({ port: PORT, host: HOST }).then(() => {
-  console.log(`[server] listening on http://${HOST}:${PORT}`);
-});
+app.listen({ port: PORT, host: HOST })
+  .then(() => {
+    console.log(`[server] listening on http://${HOST}:${PORT}`);
+  })
+  .catch((err) => {
+    console.error("[server] failed to start:", err);
+    process.exit(1);
+  });

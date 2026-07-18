@@ -45,6 +45,7 @@ export function useHarnessSession(
 
     ws.onopen = () => setConnected(true);
     ws.onclose = () => setConnected(false);
+    ws.onerror = () => setConnected(false);
     ws.onmessage = (e) => {
       let msg: ServerMessage;
       try {
@@ -60,10 +61,17 @@ export function useHarnessSession(
         seen.add(msg.event.id);
         const event = msg.event;
         setEvents((prev) => {
-          // Drop the optimistic local echo once the real JSONL user entry lands.
+          // Drop only the single oldest optimistic local echo that matches, so
+          // repeated identical prompts don't all vanish when one real entry lands.
           if (event.kind === "user") {
-            const filtered = prev.filter((e) => !(e.id.startsWith("local-") && e.kind === "user" && e.text === event.text));
-            return [...filtered, event];
+            const idx = prev.findIndex(
+              (e) => e.id.startsWith("local-") && e.kind === "user" && e.text === event.text,
+            );
+            if (idx >= 0) {
+              const next = prev.slice();
+              next.splice(idx, 1);
+              return [...next, event];
+            }
           }
           return [...prev, event];
         });

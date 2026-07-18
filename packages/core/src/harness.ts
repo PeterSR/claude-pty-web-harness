@@ -33,6 +33,19 @@ export const HARNESS_NAMESPACE = "claude-pty-web-harness";
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
 
+/**
+ * Thrown by createSession when the requested cwd resolves outside the configured
+ * allowedRoots. Carries a stable `code` so a transport can map it to a 403
+ * without depending on the message or an instanceof check across module bounds.
+ */
+export class CwdNotAllowedError extends Error {
+  readonly code = "cwd_not_allowed";
+  constructor(message: string) {
+    super(message);
+    this.name = "CwdNotAllowedError";
+  }
+}
+
 export interface HarnessOptions {
   /**
    * Override the daemon socket path. Omitted resolves the default location
@@ -115,7 +128,7 @@ export class ClaudeHarness extends EventEmitter {
     for (const root of this.allowedRoots) {
       if (resolved === root || resolved.startsWith(root + sep)) return resolved;
     }
-    throw new Error(`cwd ${resolved} is outside the allowed roots`);
+    throw new CwdNotAllowedError(`cwd ${resolved} is outside the allowed roots`);
   }
 
   list(): SessionSummary[] {
@@ -188,8 +201,11 @@ export class ClaudeHarness extends EventEmitter {
     tailer.start();
 
     // Drive past the startup modals to readiness, reading the daemon's rendered
-    // screen (no local terminal emulation needed).
-    void this.driveStartup(session);
+    // screen (no local terminal emulation needed). Launched fire-and-forget, so
+    // a throwing writePane/writeBytes must be caught here or it becomes an
+    // unhandled rejection that can kill the process; fail the session instead
+    // (markFailed no-ops if it already resolved).
+    void this.driveStartup(session).catch(() => this.markFailed(session, "startup_timeout"));
 
     return this.summary(session);
   }
@@ -303,6 +319,9 @@ export class ClaudeHarness extends EventEmitter {
 
   private markReady(session: Session): void {
     if (session.ready) return;
+    // Same guard as markFailed: a kill during the captureScreen await can remove
+    // the session or flip its status, and we must not emit a bogus "ready" after.
+    if (!this.sessions.has(session.id) || session.status !== "starting") return;
     session.ready = true;
     session.status = "ready";
     this.emit("status", session.id, "ready");
@@ -318,6 +337,9 @@ export class ClaudeHarness extends EventEmitter {
     if (!this.sessions.has(session.id) || session.status !== "starting") return;
     session.status = "failed";
     session.error = reason;
+    // Stop tailing so a failed session doesn't keep its 200ms poll timer alive
+    // forever. The pty is left running (documented) so the caller can inspect it.
+    session.tailer.stop();
     this.emit("status", session.id, "failed", reason);
   }
 
