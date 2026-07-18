@@ -2,7 +2,19 @@
   "name": "@petersr/claude-pty-web-harness-react",
   "version": "0.1.0",
   "description": "Headless React hook + client for a claude-pty-web-harness server. No UI, no styling.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "harness",
+    "react",
+    "hook",
+    "websocket",
+    "headless"
+  ],
+  "author": "Peter Severin Rasmussen",
+  "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -11,8 +23,13 @@
       "default": "./dist/index.js"
     }
   },
+  "engines": {
+    "node": ">=20"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -39,6 +56,5 @@
     "@types/react": "^18.3.12",
     "react": "^18.3.1",
     "typescript": "^5.7.2"
-  },
-  "license": "MIT"
+  }
 }

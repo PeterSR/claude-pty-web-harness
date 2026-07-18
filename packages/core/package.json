@@ -2,7 +2,20 @@
   "name": "@petersr/claude-pty-web-harness-core",
   "version": "0.1.0",
   "description": "Transport-agnostic core: drive Claude Code in a pupptyeer pty, stream its JSONL as chat events.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "pty",
+    "pupptyeer",
+    "harness",
+    "jsonl",
+    "terminal",
+    "agent"
+  ],
+  "author": "Peter Severin Rasmussen",
+  "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -11,8 +24,13 @@
       "default": "./dist/index.js"
     }
   },
+  "engines": {
+    "node": ">=20"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -38,6 +56,5 @@
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
-  },
-  "license": "MIT"
+  }
 }
