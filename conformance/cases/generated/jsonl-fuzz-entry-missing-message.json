@@ -1,0 +1,14 @@
+{
+  "name": "jsonl-fuzz-entry-missing-message",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1"
+    },
+    "lineNo": 1
+  },
+  "expect": []
+}

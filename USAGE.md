@@ -119,13 +119,27 @@ auth: `authenticate(req)` guards the REST routes (401 on false) and
 `Authorization` header on a WS, so validate a short-lived ticket / query token
 there). `/health` stays open.
 
+The blob route (`GET /:id/blobs/:blobId`) has the same problem as the
+WebSocket: a browser `<img src>` can't send an `Authorization` header either,
+so under a header-based `authenticate` every image renders broken.
+`authenticateBlob(req)`, when set, guards that one route *instead of*
+`authenticate` (same relationship `authenticateWs` has); if you set
+`authenticate` to anything header-based you MUST also set `authenticateBlob`.
+Recommended: a path-scoped `HttpOnly`, `SameSite=Strict` cookie minted at
+session start, so the browser attaches it to `<img src>` automatically and
+nothing sensitive enters a URL - a query-string ticket is the other option but
+leaks through logs/history/`Referer`. This library doesn't pick the mechanism
+for you (no bundled cookie/ticket helper); see `packages/server/src/index.ts`
+for the full rationale.
+
 > **Security.** The reference servers (TS and Python) are development tools with
 > **no authentication**. They bind `127.0.0.1` by default, and sessions default
 > to `permissionMode "bypassPermissions"`, so a spawned `claude` runs without
 > tool approval prompts in any `cwd` a client requests. Never expose them beyond
 > localhost as-is. Before any wider exposure, set `authenticate` /
-> `authenticateWs` and `allowedRoots` (Python: `authenticate_ws` /
-> `allowed_roots`) and consider a stricter permission mode.
+> `authenticateWs` / `authenticateBlob` and `allowedRoots` (Python:
+> `authenticate_ws` / `authenticate_blob` / `allowed_roots`) and consider a
+> stricter permission mode.
 
 ### Use the React hook (bring your own components)
 
@@ -209,7 +223,10 @@ PORT=4318 uv run uvicorn claude_pty_web_harness.server:app
 Or mount the harness on your own FastAPI app: see `claude_pty_web_harness/server.py`
 (`lifespan` creates the harness; each route reads `app.state.harness`). REST
 routes accept FastAPI `dependencies` for auth; the WebSocket is guarded
-separately via `authenticate_ws`.
+separately via `authenticate_ws`, and the blob route separately via
+`authenticate_blob` (same reasoning as `authenticate_ws`: a browser `<img
+src>` can't carry a header-based dependency either - see the module
+docstring in `server.py` for the recommended cookie-based approach).
 
 ## The wire protocol
 

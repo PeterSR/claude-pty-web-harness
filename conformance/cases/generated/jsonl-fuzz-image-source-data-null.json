@@ -1,0 +1,39 @@
+{
+  "name": "jsonl-fuzz-image-source-data-null",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-src-data-null",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "image",
+            "source": {
+              "data": null,
+              "media_type": "image/png"
+            }
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-src-data-null:x:0",
+      "ts": "t1",
+      "kind": "user",
+      "text": "",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "image"
+        }
+      ]
+    }
+  ]
+}

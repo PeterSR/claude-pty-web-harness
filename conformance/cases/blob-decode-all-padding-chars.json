@@ -1,0 +1,8 @@
+{
+  "name": "blob-decode-all-padding-chars",
+  "module": "blob",
+  "fn": "decodeImage",
+  "comment": "Edge case hand-picked (not fuzzer-generated) because it is verified to decode identically in both languages: a string of only '=' padding characters decodes to zero bytes in both Node's Buffer.from and Python's base64.b64decode. This is NOT the same as unpadded/improperly-padded base64 (e.g. 'abc'), which does diverge - see PARITY.md - and is deliberately not included here.",
+  "input": { "base64": "====" },
+  "expect": { "blobId": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0 }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "jsonl-fuzz-unicode-salvaged-from-unknown-block-3",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-uniu-3",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "a_future_block_type",
+            "text": "🚀✨🔥 emoji text with surrogate pairs"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-uniu-3:x:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "🚀✨🔥 emoji text with surrogate pairs",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "a_future_block_type",
+          "text": "🚀✨🔥 emoji text with surrogate pairs"
+        }
+      ]
+    }
+  ]
+}

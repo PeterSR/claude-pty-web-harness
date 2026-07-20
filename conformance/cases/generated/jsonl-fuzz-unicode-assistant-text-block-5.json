@@ -1,0 +1,30 @@
+{
+  "name": "jsonl-fuzz-unicode-assistant-text-block-5",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-uni-5",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "​‍ zero-width space and joiner"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-uni-5:a:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "​‍ zero-width space and joiner"
+    }
+  ]
+}

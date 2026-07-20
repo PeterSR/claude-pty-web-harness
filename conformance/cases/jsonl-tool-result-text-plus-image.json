@@ -37,7 +37,7 @@
       "isError": false,
       "parts": [
         { "type": "text", "text": "here is the result" },
-        { "type": "image", "blobId": "stub-blob-id", "mediaType": "image/png", "bytes": 11 }
+        { "type": "image", "blobId": "stub-blob-id", "mediaType": "image/png", "bytes": 999999 }
       ]
     }
   ]

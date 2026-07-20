@@ -1,0 +1,38 @@
+{
+  "name": "jsonl-fuzz-text-block-extra-fields",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a1",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "hi",
+            "unexpected": 123,
+            "nested": {
+              "deep": [
+                1,
+                2,
+                3
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a1:a:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "hi"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "jsonl-fuzz-unicode-user-string-content-3",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-uni-3",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": "🚀✨🔥 emoji text with surrogate pairs"
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-uni-3",
+      "ts": "t1",
+      "kind": "user",
+      "text": "🚀✨🔥 emoji text with surrogate pairs"
+    }
+  ]
+}

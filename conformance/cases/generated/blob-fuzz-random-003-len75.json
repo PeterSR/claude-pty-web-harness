@@ -1,0 +1,12 @@
+{
+  "name": "blob-fuzz-random-003-len75",
+  "module": "blob",
+  "fn": "decodeImage",
+  "input": {
+    "base64": "9+BAROnxXyuCCeIWI0zjQuMuQMJa3gLfBIAcBqaf5ItwRPgFWJrpNkZAuQnvT1bzGIaQKDBjvh5lyYq0MBOhUkznGjtaaZZYx+z/"
+  },
+  "expect": {
+    "blobId": "042f52650544ea7fc303555304b55a74ba07b133d96fe3bf0b7b29b5f9694c55",
+    "bytes": 75
+  }
+}

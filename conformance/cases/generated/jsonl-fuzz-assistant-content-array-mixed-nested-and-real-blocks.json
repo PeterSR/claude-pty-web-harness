@@ -1,0 +1,49 @@
+{
+  "name": "jsonl-fuzz-assistant-content-array-mixed-nested-and-real-blocks",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a1",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          [],
+          "nope",
+          {
+            "type": "tool_use",
+            "name": "t",
+            "id": "i",
+            "input": {}
+          },
+          [
+            []
+          ],
+          {
+            "type": "text",
+            "text": "ok"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a1:tu:0",
+      "ts": "t1",
+      "kind": "tool_use",
+      "name": "t",
+      "toolUseId": "i",
+      "input": {}
+    },
+    {
+      "id": "a1:a:1",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "ok"
+    }
+  ]
+}

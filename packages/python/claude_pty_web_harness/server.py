@@ -14,13 +14,37 @@ Two ways to use it:
           harness,
           dependencies=[Depends(validate_token)],   # guards the REST routes
           authenticate_ws=my_ws_ticket_check,        # guards the WS upgrade
+          authenticate_blob=my_blob_cookie_check,    # guards the blob route
       )
 
 REST routes accept FastAPI `dependencies` so your auth runs on every call.
 Browsers can't set an Authorization header on a WebSocket, so the WS route is
 guarded separately by `authenticate_ws` (validate a short-lived ticket / query
-token there). The harness itself stays transport-agnostic and unauthenticated;
-auth lives here, at the edge.
+token there).
+
+The same problem applies to the blob route (`GET
+{prefix}/sessions/:id/blobs/:blob_id`): a browser `<img src>` cannot send
+an Authorization header either, so under header-based `dependencies` every
+image renders broken. `authenticate_blob`, when set, guards that one route
+*instead of* `dependencies` (not in addition to it) - same relationship
+`authenticate_ws` has to `dependencies` for the WebSocket. If you set
+`dependencies` to anything header-based, you MUST also set
+`authenticate_blob` or images will 401.
+
+Recommended: a path-scoped `HttpOnly`, `SameSite=Strict` cookie minted at
+session start and scoped to the blob route, so the browser attaches it to
+`<img src>` automatically and nothing sensitive ever enters a URL. A
+query-string ticket token is the other common option, but it leaks through
+access logs, browser history, and the `Referer` header on outbound links; a
+short expiry narrows that window without closing those channels, and if you
+go this route the ticket should be scoped to a single blob_id rather than
+being a general pass to the whole blob route. This library does not pick the
+mechanism for you - auth lives here, at the edge, and the harness stays
+transport-agnostic - so there is no bundled ticket or cookie helper;
+implement whichever fits your deployment. Omit `authenticate_blob` to keep
+the current REST guarding (`dependencies`, or none) on this route, which is
+correct for the no-auth default and for cookie-based auth that FastAPI's
+normal request handling already sees.
 """
 from __future__ import annotations
 
@@ -51,6 +75,11 @@ _BLOB_CONTENT_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 HarnessSource = Union[ClaudeHarness, Callable[[], ClaudeHarness]]
 # Return falsy / raise to reject the WebSocket before it is accepted.
 WsAuthenticator = Callable[[WebSocket], Union[bool, Awaitable[bool]]]
+# Return falsy / raise to reject the blob route request with a 401. Same
+# shape as WsAuthenticator but keyed on a Request, since (like the WebSocket
+# upgrade) a browser <img src> can't carry the header-based `dependencies`
+# guard - see the module docstring.
+BlobAuthenticator = Callable[[Request], Union[bool, Awaitable[bool]]]
 
 
 def _resolver(source: HarnessSource) -> Callable[[], ClaudeHarness]:
@@ -75,12 +104,19 @@ def create_router(
     prefix: str = "/api",
     dependencies: Optional[Sequence[Depends]] = None,
     authenticate_ws: Optional[WsAuthenticator] = None,
+    authenticate_blob: Optional[BlobAuthenticator] = None,
 ) -> APIRouter:
     """Build an APIRouter with the harness REST + WebSocket endpoints.
 
     `harness` may be a ClaudeHarness or a zero-arg callable returning one.
-    `dependencies` are applied to every REST route (not the WebSocket).
+    `dependencies` are applied to every REST route (not the WebSocket, and not
+    the blob route when `authenticate_blob` is given - see below).
     `authenticate_ws` guards the WebSocket upgrade.
+    `authenticate_blob` guards the blob route *instead of* `dependencies` for
+    that one route (a browser <img src> can't carry a header-based
+    dependency either); omit it to leave the blob route under the normal
+    `dependencies` guarding. See the module docstring for the full rationale
+    and the recommended cookie-based approach.
     """
     get_harness = _resolver(harness)
     dep = list(dependencies or [])
@@ -135,8 +171,21 @@ def create_router(
         except KeyError:
             return JSONResponse({"error": "unknown session"}, status_code=404)
 
-    @router.get(f"{prefix}/sessions/{{session_id}}/blobs/{{blob_id}}", dependencies=dep)
-    async def get_blob(session_id: str, blob_id: str):
+    # authenticate_blob replaces `dependencies` for this one route rather than
+    # layering on top of it (same relationship authenticate_ws has to
+    # `dependencies` for the WebSocket) - see the module docstring.
+    blob_dependencies = [] if authenticate_blob is not None else dep
+
+    @router.get(f"{prefix}/sessions/{{session_id}}/blobs/{{blob_id}}", dependencies=blob_dependencies)
+    async def get_blob(request: Request, session_id: str, blob_id: str):
+        if authenticate_blob is not None:
+            try:
+                result = authenticate_blob(request)
+                ok = await result if inspect.isawaitable(result) else result
+            except Exception:
+                ok = False
+            if not ok:
+                return JSONResponse({"error": "unauthorized"}, status_code=401)
         # Unknown session and unknown blob (and a malformed blob_id) all 404
         # with the same body, so a caller can't use the response to probe
         # which of the two didn't exist.
@@ -262,15 +311,24 @@ def include_harness_routes(
     prefix: str = "/api",
     dependencies: Optional[Sequence[Depends]] = None,
     authenticate_ws: Optional[WsAuthenticator] = None,
+    authenticate_blob: Optional[BlobAuthenticator] = None,
 ) -> None:
     """Mount the harness routes onto an existing FastAPI app (or any router-host).
 
     Mirrors the TS `registerHarnessRoutes`. Pass `dependencies` to guard the
-    REST routes with your own auth (e.g. `[Depends(validate_token)]`) and
-    `authenticate_ws` to guard the WebSocket upgrade.
+    REST routes with your own auth (e.g. `[Depends(validate_token)]`),
+    `authenticate_ws` to guard the WebSocket upgrade, and `authenticate_blob`
+    to guard the blob route (replacing `dependencies` for that one route -
+    see the module docstring for why and the recommended cookie approach).
     """
     app.include_router(
-        create_router(harness, prefix=prefix, dependencies=dependencies, authenticate_ws=authenticate_ws)
+        create_router(
+            harness,
+            prefix=prefix,
+            dependencies=dependencies,
+            authenticate_ws=authenticate_ws,
+            authenticate_blob=authenticate_blob,
+        )
     )
 
 

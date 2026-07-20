@@ -62,7 +62,7 @@ class TestParseEntryToolResultImage(unittest.TestCase):
 
         def on_image(base64_data, media_type):
             calls.append((base64_data, media_type))
-            return "stub-blob-id"
+            return "stub-blob-id", 11
 
         events = parse_entry(
             {
@@ -132,7 +132,7 @@ class TestParseEntryUserImageBlock(unittest.TestCase):
                 },
             },
             2,
-            lambda data, media_type: "blob-abc",
+            lambda data, media_type: ("blob-abc", 5),
         )
         self.assertEqual(events, [
             {
@@ -190,6 +190,89 @@ class TestParseEntryMalformedImageBlock(unittest.TestCase):
         )
         self.assertEqual(events, [
             {"id": "u1:x:0", "ts": "t1", "kind": "user", "text": "", "parts": [{"type": "unknown", "blockType": "image"}]},
+        ])
+
+    def test_sink_raising_for_a_present_payload_falls_back_to_unknown(self):
+        # Distinct from the missing-source cases above: here source/data/
+        # media_type are all present, so on_image IS called, but its decode
+        # rejects the payload (e.g. improperly padded base64 - see
+        # PARITY.md). parse_entry must not let that exception escape.
+        def on_image(data, media_type):
+            raise ValueError("simulated decode failure")
+
+        events = parse_entry(
+            {
+                "type": "user", "uuid": "u1", "timestamp": "t1",
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "abc"}}],
+                },
+            },
+            1,
+            on_image,
+        )
+        self.assertEqual(events, [
+            {"id": "u1:x:0", "ts": "t1", "kind": "user", "text": "", "parts": [{"type": "unknown", "blockType": "image"}]},
+        ])
+
+
+class TestParseEntryBareArrayBlock(unittest.TestCase):
+    def test_bare_array_is_never_treated_as_a_content_block(self):
+        # isinstance(block, dict) already excludes a bare list, unlike a naive
+        # "is this an object" check would in some languages; this pins that
+        # behavior so it can't regress and diverge from the TS side.
+        events = parse_entry(
+            {
+                "type": "user", "uuid": "u1", "timestamp": "t1",
+                "message": {"role": "user", "content": [[], "not a dict either", 42, None, {"type": "text", "text": "ok"}]},
+            },
+            1,
+        )
+        self.assertEqual(events, [{"id": "u1:u:0", "ts": "t1", "kind": "user", "text": "ok"}])
+
+
+class TestParseEntryLegacyTextSalvage(unittest.TestCase):
+    def test_non_text_tool_result_block_with_string_text_is_not_silently_emptied(self):
+        # The pre-fix _as_text() kept text from ANY block with a "text" key,
+        # regardless of type - not just type "text" blocks. A block shaped
+        # {"type":"foo","text":"hi"} must still contribute "hi" to the legacy
+        # "text" field, and the salvaged text must also ride along on the
+        # unknown part so a parts-reading renderer and a text-only one never
+        # disagree.
+        events = parse_entry(
+            {
+                "type": "user", "uuid": "u1", "timestamp": "t1",
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "tu1", "is_error": False,
+                         "content": [{"type": "foo", "text": "hi"}]},
+                    ],
+                },
+            },
+            1,
+        )
+        self.assertEqual(events, [
+            {
+                "id": "u1:tr:0", "ts": "t1", "kind": "tool_result", "toolUseId": "tu1",
+                "text": "hi", "isError": False,
+                "parts": [{"type": "unknown", "blockType": "foo", "text": "hi"}],
+            },
+        ])
+
+    def test_unrecognized_assistant_block_with_string_text_salvages_it_too(self):
+        events = parse_entry(
+            {
+                "type": "assistant", "uuid": "a1", "timestamp": "t1",
+                "message": {"role": "assistant", "content": [{"type": "foo", "text": "hi"}]},
+            },
+            1,
+        )
+        self.assertEqual(events, [
+            {
+                "id": "a1:x:0", "ts": "t1", "kind": "assistant_text", "text": "hi",
+                "parts": [{"type": "unknown", "blockType": "foo", "text": "hi"}],
+            },
         ])
 
 

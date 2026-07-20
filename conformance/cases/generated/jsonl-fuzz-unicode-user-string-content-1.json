@@ -1,0 +1,25 @@
+{
+  "name": "jsonl-fuzz-unicode-user-string-content-1",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-uni-1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": "こんにちは世界"
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-uni-1",
+      "ts": "t1",
+      "kind": "user",
+      "text": "こんにちは世界"
+    }
+  ]
+}

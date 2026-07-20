@@ -1,0 +1,37 @@
+{
+  "name": "jsonl-fuzz-unicode-salvaged-from-unknown-block-7",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-uniu-7",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "a_future_block_type",
+            "text": "𝔘𝔫𝔦𝔠𝔬𝔡𝔣 astral-plane math letters"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-uniu-7:x:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "𝔘𝔫𝔦𝔠𝔬𝔡𝔣 astral-plane math letters",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "a_future_block_type",
+          "text": "𝔘𝔫𝔦𝔠𝔬𝔡𝔣 astral-plane math letters"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "jsonl-fuzz-unicode-assistant-text-block-6",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-uni-6",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "line1\nline2\ttab\"quote\\backslash"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-uni-6:a:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "line1\nline2\ttab\"quote\\backslash"
+    }
+  ]
+}

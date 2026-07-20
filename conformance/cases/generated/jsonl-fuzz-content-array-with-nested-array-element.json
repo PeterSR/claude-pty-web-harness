@@ -1,0 +1,20 @@
+{
+  "name": "jsonl-fuzz-content-array-with-nested-array-element",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          []
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": []
+}

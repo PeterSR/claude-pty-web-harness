@@ -1,0 +1,33 @@
+{
+  "name": "jsonl-fuzz-tool-result-missing-is-error",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "content": "ok"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "tu1",
+      "text": "ok",
+      "isError": false
+    }
+  ]
+}

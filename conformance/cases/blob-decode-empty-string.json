@@ -1,0 +1,8 @@
+{
+  "name": "blob-decode-empty-string",
+  "module": "blob",
+  "fn": "decodeImage",
+  "comment": "Edge case hand-picked (not fuzzer-generated) because it is verified to decode identically in both languages: an empty base64 string decodes to zero bytes in both Node's Buffer.from and Python's base64.b64decode.",
+  "input": { "base64": "" },
+  "expect": { "blobId": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0 }
+}

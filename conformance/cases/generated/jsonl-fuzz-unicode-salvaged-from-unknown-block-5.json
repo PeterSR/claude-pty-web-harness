@@ -1,0 +1,37 @@
+{
+  "name": "jsonl-fuzz-unicode-salvaged-from-unknown-block-5",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-uniu-5",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "a_future_block_type",
+            "text": "​‍ zero-width space and joiner"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-uniu-5:x:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "​‍ zero-width space and joiner",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "a_future_block_type",
+          "text": "​‍ zero-width space and joiner"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "jsonl-fuzz-assistant-content-empty-array",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-content-empty-array",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": []
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": []
+}

@@ -32,6 +32,31 @@ export interface HarnessRouteOptions {
    * false to reject the connection. Omit for no auth (default).
    */
   authenticateWs?: (req: FastifyRequest) => boolean | Promise<boolean>;
+  /**
+   * Guard for the blob route (`GET {prefix}/sessions/:id/blobs/:blobId`),
+   * used *instead of* `authenticate` for that one route - not in addition to
+   * it. Same reason as `authenticateWs`: a browser `<img src>` can't send an
+   * Authorization header either, so header-based `authenticate` guards this
+   * route in name only and every image renders broken under it. If you set
+   * `authenticate` to anything header-based, you MUST also set
+   * `authenticateBlob` or images will 401.
+   *
+   * Recommended: a path-scoped `HttpOnly`, `SameSite=Strict` cookie minted at
+   * session start and scoped to the blob route, so the browser attaches it to
+   * `<img src>` automatically and nothing sensitive ever enters a URL. A
+   * query-string ticket token is the other common option, but it leaks
+   * through access logs, browser history, and the `Referer` header on
+   * outbound links; a short expiry narrows that window without closing those
+   * channels, and if you go this route the ticket should be scoped to a
+   * single blobId rather than being a general pass to the whole blob route.
+   * This library does not pick the mechanism for you - auth lives at the
+   * edge, and the harness stays transport-agnostic - so there is no bundled
+   * ticket or cookie helper; implement whichever fits your deployment.
+   * Omit to keep the current REST guarding (`authenticate`, or none) on this
+   * route, which is correct for the no-auth default and for cookie-based
+   * auth that Fastify's normal request handling already sees.
+   */
+  authenticateBlob?: (req: FastifyRequest) => boolean | Promise<boolean>;
 }
 
 /**
@@ -74,6 +99,22 @@ export async function registerHarnessRoutes(
       }
     : undefined;
   const guarded = restGuard ? { preHandler: restGuard } : {};
+
+  // The blob route needs its own guard, same reasoning as the WS upgrade:
+  // when set, it replaces the REST guard for this one route (not layered
+  // on top of it) because a browser <img src> can't carry the REST guard's
+  // Authorization header either. No authenticateBlob -> keep whatever REST
+  // guarding is already in effect (none, or `authenticate`), unchanged.
+  const blobGuard = opts.authenticateBlob
+    ? {
+        preHandler: async (req: FastifyRequest, reply: FastifyReply) => {
+          if (!(await opts.authenticateBlob!(req))) {
+            reply.code(401);
+            return reply.send({ error: "unauthorized" });
+          }
+        },
+      }
+    : guarded;
 
   // Per-session set of connected WebSocket clients.
   const subscribers = new Map<string, Set<WebSocket>>();
@@ -147,7 +188,7 @@ export async function registerHarnessRoutes(
     }
   });
 
-  app.get(`${prefix}/sessions/:id/blobs/:blobId`, guarded, async (req, reply) => {
+  app.get(`${prefix}/sessions/:id/blobs/:blobId`, blobGuard, async (req, reply) => {
     const { id, blobId } = req.params as { id: string; blobId: string };
     // Unknown session and unknown blob (and a malformed blobId) all 404 with
     // the same body, so a caller can't use the response to probe which of the

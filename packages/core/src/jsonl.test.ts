@@ -62,7 +62,7 @@ test("parseEntry: tool_result with a text block plus an image block", () => {
   const calls: Array<{ base64: string; mediaType: string }> = [];
   const onImage = (payload: { base64: string; mediaType: string }) => {
     calls.push(payload);
-    return "stub-blob-id";
+    return { blobId: "stub-blob-id", bytes: 11 };
   };
 
   const events = parseEntry(
@@ -141,7 +141,7 @@ test("parseEntry: a user-message image block with a sink produces a real image p
       },
     },
     2,
-    () => "blob-abc",
+    () => ({ blobId: "blob-abc", bytes: 5 }),
   );
 
   assert.deepEqual(events, [
@@ -215,5 +215,104 @@ test("parseEntry: an image block with a source missing data/media_type also fall
 
   assert.deepEqual(events, [
     { id: "u1:x:0", ts: "t1", kind: "user", text: "", parts: [{ type: "unknown", blockType: "image" }] },
+  ]);
+});
+
+test("parseEntry: a sink that throws for a present base64/mediaType payload falls back to unknown", () => {
+  // Distinct from the missing-source cases above: here source/data/media_type
+  // are all present, so onImage IS called, but its decode rejects the
+  // payload (e.g. improperly padded base64 - see PARITY.md). parseEntry must
+  // not let that exception escape.
+  const events = parseEntry(
+    {
+      type: "user",
+      uuid: "u1",
+      timestamp: "t1",
+      message: {
+        role: "user",
+        content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "abc" } }],
+      },
+    },
+    1,
+    () => {
+      throw new Error("simulated decode failure");
+    },
+  );
+
+  assert.deepEqual(events, [
+    { id: "u1:x:0", ts: "t1", kind: "user", text: "", parts: [{ type: "unknown", blockType: "image" }] },
+  ]);
+});
+
+test("parseEntry: a bare array is never treated as a content block", () => {
+  // typeof [] === "object" in JS, so this guards against a naive object
+  // check letting a nested array through as if it were a block; Python's
+  // isinstance(block, dict) already excludes lists, so this keeps parity.
+  const events = parseEntry(
+    {
+      type: "user",
+      uuid: "u1",
+      timestamp: "t1",
+      message: { role: "user", content: [[], "not a dict either", 42, null, { type: "text", text: "ok" }] },
+    },
+    1,
+  );
+
+  assert.deepEqual(events, [{ id: "u1:u:0", ts: "t1", kind: "user", text: "ok" }]);
+});
+
+test("parseEntry: a non-text tool_result block that still carries a string text is not silently emptied", () => {
+  // The pre-fix asText() kept text from ANY block with a "text" key,
+  // regardless of type - not just type:"text" blocks. A block shaped
+  // {type:"foo", text:"hi"} must still contribute "hi" to the legacy `text`
+  // field, and the salvaged text must also ride along on the unknown part so
+  // a parts-reading renderer and a text-only one never disagree.
+  const events = parseEntry(
+    {
+      type: "user",
+      uuid: "u1",
+      timestamp: "t1",
+      message: {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "tu1", is_error: false, content: [{ type: "foo", text: "hi" }] },
+        ],
+      },
+    },
+    1,
+  );
+
+  assert.deepEqual(events, [
+    {
+      id: "u1:tr:0",
+      ts: "t1",
+      kind: "tool_result",
+      toolUseId: "tu1",
+      text: "hi",
+      isError: false,
+      parts: [{ type: "unknown", blockType: "foo", text: "hi" }],
+    },
+  ]);
+});
+
+test("parseEntry: an unrecognized assistant block that carries a string text salvages it too", () => {
+  const events = parseEntry(
+    {
+      type: "assistant",
+      uuid: "a1",
+      timestamp: "t1",
+      message: { role: "assistant", content: [{ type: "foo", text: "hi" }] },
+    },
+    1,
+  );
+
+  assert.deepEqual(events, [
+    {
+      id: "a1:x:0",
+      ts: "t1",
+      kind: "assistant_text",
+      text: "hi",
+      parts: [{ type: "unknown", blockType: "foo", text: "hi" }],
+    },
   ]);
 });

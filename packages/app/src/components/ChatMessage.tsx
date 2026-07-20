@@ -50,12 +50,14 @@ function ContentParts({ parts, blobUrl }: { parts: ContentPart[]; blobUrl?: (blo
           );
         }
         return (
-          <span
-            key={i}
-            className="inline-block rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300/80"
-          >
-            [unsupported block: {part.blockType}]
-          </span>
+          <div key={i} className="space-y-1">
+            <span className="inline-block rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300/80">
+              [unsupported block: {part.blockType}]
+            </span>
+            {/* The block's own text, if it had any, rides along with the chip
+                so this never shows less than what the plain `text` field says. */}
+            {part.text && <Pre>{part.text}</Pre>}
+          </div>
         );
       })}
     </div>

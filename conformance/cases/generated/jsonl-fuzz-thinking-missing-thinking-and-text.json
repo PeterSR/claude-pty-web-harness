@@ -1,0 +1,29 @@
+{
+  "name": "jsonl-fuzz-thinking-missing-thinking-and-text",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a1",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a1:t:0",
+      "ts": "t1",
+      "kind": "thinking",
+      "text": ""
+    }
+  ]
+}

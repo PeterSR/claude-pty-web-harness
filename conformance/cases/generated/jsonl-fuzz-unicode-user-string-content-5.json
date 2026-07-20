@@ -1,0 +1,25 @@
+{
+  "name": "jsonl-fuzz-unicode-user-string-content-5",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-uni-5",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": "​‍ zero-width space and joiner"
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-uni-5",
+      "ts": "t1",
+      "kind": "user",
+      "text": "​‍ zero-width space and joiner"
+    }
+  ]
+}

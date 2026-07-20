@@ -26,9 +26,11 @@ StartupFailure = Literal[
 # "user", "assistant_text", and "tool_result" additionally carry an optional
 # "parts" (a ContentPart list): the lossless, ordered breakdown of a
 # message/tool_result's content blocks. Additive alongside "text" (which stays
-# exactly as it always was, a flattened text-only summary joining only the
-# text parts) so old consumers reading "text" see no change; "parts" is only
-# present when the content had something beyond plain text.
+# exactly as it always was: a flattened summary joining the text of every
+# block that carries a string "text" field, regardless of that block's
+# "type" - the same rule the pre-fix parsing always used) so old consumers
+# reading "text" see no change; "parts" is only present when the content had
+# something beyond plain text.
 #   user           { id, ts?, kind:"user", text, parts? }
 #   assistant_text { id, ts?, kind:"assistant_text", text, parts? }
 #   thinking       { id, ts?, kind:"thinking", text }
@@ -42,9 +44,12 @@ ChatEvent = dict[str, Any]
 # ContentPart variants (discriminated by "type"), documenting the shape of the
 # dicts inside ChatEvent["parts"]. "unknown" exists so a content-block type
 # this library doesn't recognize (e.g. a future Anthropic block type) surfaces
-# visibly instead of silently vanishing the way it used to. Kept as TypedDicts
-# purely for documentation/type-checking; ChatEvent itself stays a plain dict
-# at runtime, same as everywhere else in this file.
+# visibly instead of silently vanishing the way it used to; its optional
+# "text" carries that block's own text (if it had any) so a parts-reading
+# renderer and a text-only one never disagree about whether the block said
+# something. Kept as TypedDicts purely for documentation/type-checking;
+# ChatEvent itself stays a plain dict at runtime, same as everywhere else in
+# this file.
 class TextPart(TypedDict):
     type: Literal["text"]
     text: str
@@ -57,9 +62,12 @@ class ImagePart(TypedDict):
     bytes: int
 
 
-class UnknownPart(TypedDict):
+class UnknownPart(TypedDict, total=False):
+    # blockType is conceptually required (always present); total=False here
+    # only to make "text" optional, matching SessionSummary's convention below.
     type: Literal["unknown"]
     blockType: str
+    text: str
 
 
 ContentPart = Union[TextPart, ImagePart, UnknownPart]

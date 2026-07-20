@@ -5,16 +5,20 @@
 /**
  * One block of content within a ChatEvent's `parts` array: the lossless,
  * ordered breakdown of a message/tool_result's content blocks. Additive
- * alongside `text` (which stays exactly as it always was, a flattened
- * text-only summary joining only the `text` parts) so old consumers reading
- * `text` see no change. `unknown` exists so a content-block type this library
- * doesn't recognize (e.g. a future Anthropic block type) surfaces visibly
- * instead of silently vanishing the way it used to.
+ * alongside `text` (which stays exactly as it always was: a flattened summary
+ * joining the text of every block that carries a string `text` field,
+ * regardless of that block's `type` - the same rule the pre-fix parsing
+ * always used) so old consumers reading `text` see no change. `unknown`
+ * exists so a content-block type this library doesn't recognize (e.g. a
+ * future Anthropic block type) surfaces visibly instead of silently vanishing
+ * the way it used to; its optional `text` carries that block's own text (if
+ * it had any) so a parts-reading renderer and a text-only one never disagree
+ * about whether the block said something.
  */
 export type ContentPart =
   | { type: "text"; text: string }
   | { type: "image"; blobId: string; mediaType: string; bytes: number }
-  | { type: "unknown"; blockType: string };
+  | { type: "unknown"; blockType: string; text?: string };
 
 /** A single rendered item in the chat transcript, derived from Claude's JSONL. */
 export type ChatEvent =

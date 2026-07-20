@@ -1,0 +1,33 @@
+{
+  "name": "jsonl-fuzz-tool-result-missing-tool-use-id",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "is_error": true,
+            "content": "oops"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "",
+      "text": "oops",
+      "isError": true
+    }
+  ]
+}

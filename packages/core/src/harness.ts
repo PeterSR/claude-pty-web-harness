@@ -7,7 +7,7 @@ import { PupptyeerClient } from "pupptyeer-client";
 import type { Screen } from "pupptyeer-client";
 import { JsonlTailer } from "./jsonl.js";
 import type { ImageSink } from "./jsonl.js";
-import { hashImageBytes } from "./blob.js";
+import { decodeImage } from "./blob.js";
 import {
   readyForInput,
   hasInputPrompt,
@@ -207,11 +207,12 @@ export class ClaudeHarness extends EventEmitter {
     // reconnect) never carries raw base64 - only the {blobId, mediaType,
     // bytes} the protocol allows. Same hash in -> same blobId out, so
     // identical images (even across tool calls) dedupe to one store entry.
+    // decodeImage does the one decode this needs; bytes.length (not a second,
+    // independent decode) is what's reported back as the ContentPart's size.
     const onImage: ImageSink = ({ base64, mediaType }) => {
-      const bytes = Buffer.from(base64, "base64");
-      const blobId = hashImageBytes(bytes);
+      const { blobId, bytes } = decodeImage(base64);
       if (!blobs.has(blobId)) blobs.set(blobId, { bytes, mediaType });
-      return blobId;
+      return { blobId, bytes: bytes.length };
     };
 
     const tailer = new JsonlTailer(id, undefined, onImage);

@@ -1,0 +1,18 @@
+{
+  "name": "jsonl-fuzz-content-array-empty",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": []
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": []
+}

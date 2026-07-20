@@ -1,0 +1,38 @@
+{
+  "name": "jsonl-fuzz-image-source-only-media-type",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-src-only-media-type",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "image",
+            "source": {
+              "media_type": "image/png"
+            }
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-src-only-media-type:x:0",
+      "ts": "t1",
+      "kind": "user",
+      "text": "",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "image"
+        }
+      ]
+    }
+  ]
+}

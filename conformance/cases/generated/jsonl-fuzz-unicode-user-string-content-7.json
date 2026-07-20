@@ -1,0 +1,25 @@
+{
+  "name": "jsonl-fuzz-unicode-user-string-content-7",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-uni-7",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": "𝔘𝔫𝔦𝔠𝔬𝔡𝔣 astral-plane math letters"
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-uni-7",
+      "ts": "t1",
+      "kind": "user",
+      "text": "𝔘𝔫𝔦𝔠𝔬𝔡𝔣 astral-plane math letters"
+    }
+  ]
+}

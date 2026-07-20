@@ -1,0 +1,36 @@
+{
+  "name": "jsonl-fuzz-image-source-empty-object",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-src-empty-object",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "image",
+            "source": {}
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-src-empty-object:x:0",
+      "ts": "t1",
+      "kind": "user",
+      "text": "",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "image"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "jsonl-assistant-unknown-block-text-salvage",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "comment": "Same regression family as jsonl-tool-result-legacy-text-salvage, on the assistant side: an unrecognized top-level block type (e.g. a future Anthropic block) that still carries a string 'text' field must surface that text on both the assistant_text event's 'text' and the unknown part's 'text', not just show an empty chip.",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a1",
+      "timestamp": "t1",
+      "message": { "role": "assistant", "content": [{ "type": "foo", "text": "hi" }] }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a1:x:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "hi",
+      "parts": [{ "type": "unknown", "blockType": "foo", "text": "hi" }]
+    }
+  ]
+}

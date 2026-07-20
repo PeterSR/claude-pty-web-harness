@@ -1,0 +1,37 @@
+{
+  "name": "jsonl-fuzz-block-type-wrong-type-true",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-btype-true",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": true,
+            "text": "salvaged"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-btype-true:x:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "salvaged",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "unknown",
+          "text": "salvaged"
+        }
+      ]
+    }
+  ]
+}

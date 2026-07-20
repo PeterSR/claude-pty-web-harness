@@ -1,0 +1,8 @@
+{
+  "name": "blob-decode-with-internal-whitespace",
+  "module": "blob",
+  "fn": "decodeImage",
+  "comment": "Edge case hand-picked (not fuzzer-generated) because it is verified to decode identically in both languages: internal whitespace mixed into an otherwise-valid, properly-padded base64 string ('YW  Jj', properly-padded once the whitespace is discarded) is stripped by both Node's Buffer.from and Python's base64.b64decode(validate=False), leaving 'YWJj' which decodes to the 3 bytes of \"abc\".",
+  "input": { "base64": "YW  Jj" },
+  "expect": { "blobId": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "bytes": 3 }
+}

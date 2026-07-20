@@ -5,11 +5,11 @@
 // Imports the .ts sources directly (via tsx) rather than a built package, so
 // this always exercises the real, current implementation with no build step
 // in between.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEntry } from "../packages/core/src/jsonl.ts";
-import { hashImageBytes } from "../packages/core/src/blob.ts";
+import { hashImageBytes, decodeImage } from "../packages/core/src/blob.ts";
 import {
   readyForInput,
   hasInputPrompt,
@@ -20,6 +20,21 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const casesDir = path.join(here, "cases");
+
+// Recurse into subdirectories (cases/generated/ holds the fuzz corpus - see
+// generate.mjs) so both hand-written and generated cases run the same way.
+function listCaseFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...listCaseFiles(full));
+    } else if (entry.endsWith(".json")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
 
 // Canonical JSON: object keys sorted recursively, so the comparison below is
 // a genuine byte-level string compare rather than a shape-approximate deep
@@ -43,16 +58,24 @@ function screenFromInput(input) {
   };
 }
 
-// Every jsonl case is run with the same stub image sink: it never touches the
-// real hash (that's what the "blob" module cases pin), it just proves the
-// wiring - an image block gets *some* blobId embedded rather than vanishing
-// or leaking raw base64.
+// Every jsonl case is run with the same stub image sink: a fixed
+// {blobId, bytes} regardless of input, never attempting to decode the given
+// base64 at all. Both hash correctness (the "blob" module's job, pinned by
+// its own golden-vector cases) and decode-byte-count correctness are
+// deliberately out of scope here - this stub exists only to prove parseEntry
+// wires the sink correctly and reports back exactly what it returns, nothing
+// recomputed independently. That's also why this layer can safely fuzz
+// unpadded/malformed base64 (see jsonl-tool-result-image-bytes-come-from-sink
+// in cases/): since nothing here decodes, there's nothing for TS/Python's
+// differing decode leniency (see PARITY.md) to disagree about.
 const STUB_BLOB_ID = "stub-blob-id";
+const STUB_BYTES = 999999;
+const stubImageSink = () => ({ blobId: STUB_BLOB_ID, bytes: STUB_BYTES });
 
 function run(kase) {
   const { module: mod, fn, input } = kase;
   if (mod === "jsonl") {
-    if (fn === "parseEntry") return parseEntry(input.entry, input.lineNo, () => STUB_BLOB_ID);
+    if (fn === "parseEntry") return parseEntry(input.entry, input.lineNo, stubImageSink);
     throw new Error(`unknown jsonl fn: ${fn}`);
   }
   if (mod === "detect") {
@@ -73,18 +96,20 @@ function run(kase) {
   }
   if (mod === "blob") {
     if (fn === "hashImageBytes") return hashImageBytes(Buffer.from(input.base64, "base64"));
+    if (fn === "decodeImage") {
+      const { blobId, bytes } = decodeImage(input.base64);
+      return { blobId, bytes: bytes.length };
+    }
     throw new Error(`unknown blob fn: ${fn}`);
   }
   throw new Error(`unknown module: ${mod}`);
 }
 
-const files = readdirSync(casesDir)
-  .filter((f) => f.endsWith(".json"))
-  .sort();
+const files = listCaseFiles(casesDir).sort();
 
 let failed = false;
 for (const file of files) {
-  const kase = JSON.parse(readFileSync(path.join(casesDir, file), "utf8"));
+  const kase = JSON.parse(readFileSync(file, "utf8"));
   let got;
   try {
     got = run(kase);

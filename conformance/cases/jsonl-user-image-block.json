@@ -22,7 +22,7 @@
       "ts": "t2",
       "kind": "user",
       "text": "",
-      "parts": [{ "type": "image", "blobId": "stub-blob-id", "mediaType": "image/jpeg", "bytes": 5 }]
+      "parts": [{ "type": "image", "blobId": "stub-blob-id", "mediaType": "image/jpeg", "bytes": 999999 }]
     }
   ]
 }

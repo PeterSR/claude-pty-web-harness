@@ -1,0 +1,38 @@
+{
+  "name": "jsonl-fuzz-content-array-mixed-nested-and-real-blocks",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          [],
+          "not-a-dict-either",
+          42,
+          null,
+          [
+            []
+          ],
+          {
+            "type": "text",
+            "text": "real"
+          },
+          []
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:u:0",
+      "ts": "t1",
+      "kind": "user",
+      "text": "real"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "jsonl-fuzz-unicode-salvaged-from-unknown-block-1",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-uniu-1",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "a_future_block_type",
+            "text": "こんにちは世界"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-uniu-1:x:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "こんにちは世界",
+      "parts": [
+        {
+          "type": "unknown",
+          "blockType": "a_future_block_type",
+          "text": "こんにちは世界"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "jsonl-tool-result-legacy-text-salvage",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "comment": "Regression case: the pre-fix asText()/_as_text() kept text from ANY nested block with a string 'text' key, not just type:\"text\" blocks. A block shaped {type:\"foo\",text:\"hi\"} must still contribute \"hi\" to the legacy 'text' field (byte-identical to 0.1.0), and that same text must ride along on the resulting 'unknown' part so a parts-reading renderer and a text-only one never disagree about whether the block said something.",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "is_error": false,
+            "content": [{ "type": "foo", "text": "hi" }]
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "tu1",
+      "text": "hi",
+      "isError": false,
+      "parts": [{ "type": "unknown", "blockType": "foo", "text": "hi" }]
+    }
+  ]
+}

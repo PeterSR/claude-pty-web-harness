@@ -194,8 +194,13 @@ authentication**. They bind `127.0.0.1` by default, and sessions default to
 `permissionMode "bypassPermissions"`, so a spawned `claude` runs without tool
 approval prompts in any `cwd` a client requests. Never expose them beyond
 localhost as-is. Before any wider exposure, set `authenticate` / `authenticateWs`
-and `allowedRoots` (Python: `authenticate_ws` / `allowed_roots`) and consider a
-stricter permission mode.
+/ `authenticateBlob` and `allowedRoots` (Python: `authenticate_ws` /
+`authenticate_blob` / `allowed_roots`) and consider a stricter permission mode.
+A header-based `authenticate` alone is not enough: neither a WebSocket upgrade
+nor an `<img src>` can carry an `Authorization` header, so the stream and blob
+routes need their own guard (`authenticateWs`, `authenticateBlob`) or every
+image and live transcript breaks. See USAGE.md for the recommended
+cookie-based approach for the blob route.
 
 ## Related projects
 

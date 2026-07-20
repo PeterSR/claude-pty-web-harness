@@ -1,0 +1,25 @@
+{
+  "name": "jsonl-fuzz-unicode-user-string-content-4",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-uni-4",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": "é́́ stacked combining marks"
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-uni-4",
+      "ts": "t1",
+      "kind": "user",
+      "text": "é́́ stacked combining marks"
+    }
+  ]
+}

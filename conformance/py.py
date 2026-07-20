@@ -10,7 +10,7 @@ import json
 import os
 import sys
 
-from claude_pty_web_harness.blob import hash_image_bytes
+from claude_pty_web_harness.blob import decode_image, hash_image_bytes
 from claude_pty_web_harness.detect import (
     classify_startup_failure,
     has_input_prompt,
@@ -24,11 +24,22 @@ from claude_pty_web_harness._pupptyeer import Cursor, Screen
 HERE = os.path.dirname(os.path.abspath(__file__))
 CASES_DIR = os.path.join(HERE, "cases")
 
-# Every jsonl case is run with the same stub image sink: it never touches the
-# real hash (that's what the "blob" module cases pin), it just proves the
-# wiring - an image block gets *some* blob_id embedded rather than vanishing
-# or leaking raw base64.
+# Every jsonl case is run with the same stub image sink: a fixed
+# (blob_id, bytes) regardless of input, never attempting to decode the given
+# base64 at all. Both hash correctness (the "blob" module's job, pinned by
+# its own golden-vector cases) and decode-byte-count correctness are
+# deliberately out of scope here - this stub exists only to prove parse_entry
+# wires the sink correctly and reports back exactly what it returns, nothing
+# recomputed independently. That's also why this layer can safely fuzz
+# unpadded/malformed base64 (see jsonl-tool-result-image-bytes-come-from-sink
+# in cases/): since nothing here decodes, there's nothing for TS/Python's
+# differing decode leniency (see PARITY.md) to disagree about.
 STUB_BLOB_ID = "stub-blob-id"
+STUB_BYTES = 999999
+
+
+def _stub_image_sink(data, media_type):
+    return STUB_BLOB_ID, STUB_BYTES
 
 
 def canon(value):
@@ -59,7 +70,7 @@ def run(kase):
 
     if mod == "jsonl":
         if fn == "parseEntry":
-            return parse_entry(inp["entry"], inp["lineNo"], lambda data, media_type: STUB_BLOB_ID)
+            return parse_entry(inp["entry"], inp["lineNo"], _stub_image_sink)
         raise ValueError(f"unknown jsonl fn: {fn}")
 
     if mod == "detect":
@@ -78,17 +89,34 @@ def run(kase):
     if mod == "blob":
         if fn == "hashImageBytes":
             return hash_image_bytes(base64.b64decode(inp["base64"]))
+        if fn == "decodeImage":
+            blob_id, raw = decode_image(inp["base64"])
+            return {"blobId": blob_id, "bytes": len(raw)}
         raise ValueError(f"unknown blob fn: {fn}")
 
     raise ValueError(f"unknown module: {mod}")
 
 
+def _list_case_files(directory):
+    """Recurse into subdirectories (cases/generated/ holds the fuzz corpus -
+    see generate.mjs) so both hand-written and generated cases run the same
+    way."""
+    out = []
+    for entry in sorted(os.listdir(directory)):
+        full = os.path.join(directory, entry)
+        if os.path.isdir(full):
+            out.extend(_list_case_files(full))
+        elif entry.endswith(".json"):
+            out.append(full)
+    return out
+
+
 def main():
-    files = sorted(f for f in os.listdir(CASES_DIR) if f.endswith(".json"))
+    files = _list_case_files(CASES_DIR)
     failed = False
 
     for file in files:
-        with open(os.path.join(CASES_DIR, file), "r", encoding="utf-8") as fh:
+        with open(file, "r", encoding="utf-8") as fh:
             kase = json.load(fh)
         try:
             got = run(kase)

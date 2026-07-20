@@ -1,0 +1,30 @@
+{
+  "name": "jsonl-fuzz-unicode-assistant-text-block-7",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a-uni-7",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "𝔘𝔫𝔦𝔠𝔬𝔡𝔣 astral-plane math letters"
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a-uni-7:a:0",
+      "ts": "t1",
+      "kind": "assistant_text",
+      "text": "𝔘𝔫𝔦𝔠𝔬𝔡𝔣 astral-plane math letters"
+    }
+  ]
+}

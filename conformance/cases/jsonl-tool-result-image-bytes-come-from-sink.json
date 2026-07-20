@@ -1,0 +1,36 @@
+{
+  "name": "jsonl-tool-result-image-bytes-come-from-sink",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "comment": "Regression case for the original TS/Python `bytes` divergence: before the fix, `bytes` was computed independently in jsonl.ts (Buffer.byteLength, lenient about padding) and jsonl.py (_base64_decoded_length, which caught decode errors and returned 0) - two separate computations that disagreed for improperly padded base64 like this one ('abc' -> TS 2 / Python 0; see PARITY.md). Now `bytes` comes only from whatever the sink reports (the stub sink here never even attempts to decode), so this passes identically in both languages even with unpadded base64 that would decode inconsistently if anything tried to decode it independently at this layer - nothing does anymore.",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "is_error": false,
+            "content": [{ "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "abc" } }]
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "tu1",
+      "text": "",
+      "isError": false,
+      "parts": [{ "type": "image", "blobId": "stub-blob-id", "mediaType": "image/png", "bytes": 999999 }]
+    }
+  ]
+}

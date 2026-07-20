@@ -1,0 +1,34 @@
+{
+  "name": "jsonl-fuzz-tool-result-nested-content-empty-string",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u-tr-content-empty-string",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "is_error": false,
+            "content": ""
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u-tr-content-empty-string:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "tu1",
+      "text": "",
+      "isError": false
+    }
+  ]
+}

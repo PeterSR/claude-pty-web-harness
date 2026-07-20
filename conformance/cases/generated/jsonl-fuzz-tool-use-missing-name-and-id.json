@@ -1,0 +1,36 @@
+{
+  "name": "jsonl-fuzz-tool-use-missing-name-and-id",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a1",
+      "timestamp": "t1",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "input": {
+              "some": "value"
+            }
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "a1:tu:0",
+      "ts": "t1",
+      "kind": "tool_use",
+      "name": "tool",
+      "toolUseId": "",
+      "input": {
+        "some": "value"
+      }
+    }
+  ]
+}

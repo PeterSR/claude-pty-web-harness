@@ -1,0 +1,44 @@
+{
+  "name": "jsonl-fuzz-image-block-extra-fields",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "image",
+            "source": {
+              "type": "base64",
+              "media_type": "image/png",
+              "data": "aGk=",
+              "extra_source_field": true
+            },
+            "cache_control": null
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:x:0",
+      "ts": "t1",
+      "kind": "user",
+      "text": "",
+      "parts": [
+        {
+          "type": "image",
+          "blobId": "stub-blob-id",
+          "mediaType": "image/png",
+          "bytes": 999999
+        }
+      ]
+    }
+  ]
+}

@@ -58,23 +58,35 @@ interface RawEntry {
 /**
  * Called once per image content block encountered while parsing, so the
  * caller (the harness's per-session blob store) can decode the base64,
- * compute its content hash, stash the bytes, and hand back the blobId to
- * embed in the resulting ContentPart. This keeps parseEntry itself pure: it
- * never decodes, hashes, or stores anything, and it never puts raw base64
- * into a ChatEvent. Without a sink there is nowhere for the bytes to go, so
- * an image block degrades to an "unknown" part instead of inventing a
- * placeholder id or leaking the payload.
+ * compute its content hash, and hand back both the blobId and the decoded
+ * byte count to embed in the resulting ContentPart. The byte count comes from
+ * the sink - the one place that actually decodes, for storage - rather than
+ * from a second, independent decode here: an earlier version of this file
+ * computed `bytes` itself via `Buffer.byteLength(base64, "base64")`, which
+ * disagreed with Python's decode for improperly padded base64 ("abc" -> 2
+ * bytes in Node, but an error in Python's stricter `base64.b64decode`). One
+ * decode, one length, one place per language; see PARITY.md.
+ *
+ * This keeps parseEntry itself pure: it never decodes, hashes, or stores
+ * anything, and it never puts raw base64 into a ChatEvent. Without a sink
+ * there is nowhere for the bytes to go, so an image block degrades to an
+ * "unknown" part instead of inventing a placeholder id or leaking the
+ * payload. A sink that throws (e.g. because its decode rejected the payload)
+ * is treated the same way - see blockToPart below.
  */
-export type ImageSink = (payload: { base64: string; mediaType: string }) => string;
+export type ImageSink = (payload: { base64: string; mediaType: string }) => { blobId: string; bytes: number };
 
 /**
  * One non-text content block -> a ContentPart. `blockType` for an "unknown"
- * part is the block's own `type` string (or "unknown" if it didn't have one),
- * so a caller/renderer can at least say what kind of block got dropped.
+ * part is the block's own `type` string (or "unknown" if it didn't have one).
+ * `salvageText`, when the block carried a string `text` field despite not
+ * being a recognized type, rides along on the "unknown" part too - a
+ * parts-reading renderer and a text-only reader must never disagree about
+ * whether this block said anything.
  */
-function blockToPart(block: Record<string, unknown>, onImage?: ImageSink): ContentPart {
+function blockToPart(block: Record<string, unknown>, onImage: ImageSink | undefined, salvageText?: string): ContentPart {
   const blockType = typeof block.type === "string" ? block.type : "unknown";
-  if (blockType === "image") {
+  if (blockType === "image" && onImage) {
     // Claude Code image blocks look like
     // {"type":"image","source":{"type":"base64","media_type":"image/png","data":"..."}}.
     // Anything short of that (missing source/data/media_type) falls through
@@ -83,20 +95,33 @@ function blockToPart(block: Record<string, unknown>, onImage?: ImageSink): Conte
     const base64 = source && typeof source === "object" && typeof source.data === "string" ? source.data : undefined;
     const mediaType =
       source && typeof source === "object" && typeof source.media_type === "string" ? source.media_type : undefined;
-    if (base64 !== undefined && mediaType !== undefined && onImage) {
-      return { type: "image", blobId: onImage({ base64, mediaType }), mediaType, bytes: Buffer.byteLength(base64, "base64") };
+    if (base64 !== undefined && mediaType !== undefined) {
+      try {
+        const { blobId, bytes } = onImage({ base64, mediaType });
+        return { type: "image", blobId, mediaType, bytes };
+      } catch {
+        // The sink's decode rejected this payload - most commonly malformed
+        // or unconventionally-padded base64 that one language's decoder
+        // accepts leniently and the other's rejects (see PARITY.md). Fall
+        // through to the unknown fallback below instead of letting this
+        // throw out of parseEntry: the content came from an MCP tool and is
+        // not trusted to be well-formed.
+      }
     }
   }
-  return { type: "unknown", blockType };
+  return salvageText !== undefined ? { type: "unknown", blockType, text: salvageText } : { type: "unknown", blockType };
 }
 
 /**
  * Parse an Anthropic `content` field (a plain string, or an array of content
- * blocks) into the flattened legacy text (joining only the `text` blocks, so
- * this matches byte-for-byte what the old text-only parsing produced) plus,
- * only when a block beyond plain text is present, the full ordered part list.
- * `parts` is omitted rather than set to an all-text array so pure-text output
- * stays identical to before this fix (no new key appears).
+ * blocks) into the flattened legacy text plus, only when a block beyond plain
+ * text is present, the full ordered part list. `parts` is omitted rather than
+ * set to an all-text array so pure-text output stays identical to before this
+ * fix (no new key appears). Any block carrying a string `text` field
+ * contributes it to the legacy `text` join regardless of its `type` - the
+ * pre-fix asText() kept text from any block with a "text" key, not just
+ * `type: "text"` blocks, so `text` must stay byte-for-byte what it always was
+ * even for a block that also gets flagged as an unrecognized type.
  */
 function parseContent(content: unknown, onImage?: ImageSink): { text: string; parts?: ContentPart[] } {
   if (typeof content === "string") return { text: content };
@@ -107,15 +132,19 @@ function parseContent(content: unknown, onImage?: ImageSink): { text: string; pa
   let hasNonText = false;
 
   for (const raw of content) {
-    if (!raw || typeof raw !== "object") continue;
+    // A bare array is typeof "object" in JS but is never a content block;
+    // excluding it here matches Python's isinstance(block, dict) guard.
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
     const block = raw as Record<string, unknown>;
+    const blockText = typeof block.text === "string" ? block.text : undefined;
     if (block.type === "text") {
-      const t = String(block.text ?? "");
+      const t = blockText ?? "";
       textChunks.push(t);
       parts.push({ type: "text", text: t });
     } else {
       hasNonText = true;
-      parts.push(blockToPart(block, onImage));
+      if (blockText !== undefined) textChunks.push(blockText);
+      parts.push(blockToPart(block, onImage, blockText));
     }
   }
 
@@ -139,7 +168,7 @@ export function parseEntry(entry: RawEntry, lineNo: number, onImage?: ImageSink)
       if (Array.isArray(content)) {
         let blockNo = 0;
         for (const block of content as any[]) {
-          if (!block || typeof block !== "object") continue;
+          if (!block || typeof block !== "object" || Array.isArray(block)) continue;
           if (block.type === "tool_result") {
             const { text, parts } = parseContent(block.content, onImage);
             out.push({
@@ -171,7 +200,7 @@ export function parseEntry(entry: RawEntry, lineNo: number, onImage?: ImageSink)
       const blocks = Array.isArray(content) ? (content as any[]) : [];
       let blockNo = 0;
       for (const block of blocks) {
-        if (!block || typeof block !== "object") continue;
+        if (!block || typeof block !== "object" || Array.isArray(block)) continue;
         if (block.type === "text") {
           if (String(block.text ?? "").trim()) {
             out.push({ id: `${baseId}:a:${blockNo++}`, ts, kind: "assistant_text", text: String(block.text) });
@@ -189,13 +218,16 @@ export function parseEntry(entry: RawEntry, lineNo: number, onImage?: ImageSink)
           });
         } else {
           // Unrecognized block type (e.g. redacted_thinking) used to fall off
-          // the end with no branch and vanish; surface it instead.
+          // the end with no branch and vanish; surface it instead. If it
+          // carried a string `text` field, salvage it into both the event's
+          // `text` and the part (see parseContent's doc comment above).
+          const blockText = typeof block.text === "string" ? block.text : undefined;
           out.push({
             id: `${baseId}:x:${blockNo++}`,
             ts,
             kind: "assistant_text",
-            text: "",
-            parts: [blockToPart(block, onImage)],
+            text: blockText ?? "",
+            parts: [blockToPart(block, onImage, blockText)],
           });
         }
       }
