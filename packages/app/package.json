@@ -1,6 +1,6 @@
 {
   "name": "@petersr/claude-pty-web-harness-app",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "description": "Reference chat UI (the POC), built entirely on the harness libs.",
   "type": "module",
@@ -10,8 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@petersr/claude-pty-web-harness-protocol": "^0.3.1",
-    "@petersr/claude-pty-web-harness-react": "^0.3.1",
+    "@petersr/claude-pty-web-harness-protocol": "^0.4.0",
+    "@petersr/claude-pty-web-harness-react": "^0.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

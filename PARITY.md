@@ -45,7 +45,7 @@ Covered by the conformance corpus (module `"detect"`), including the historical 
 |---|---|
 | `readyForInput(screen)` | `ready_for_input(screen)` |
 | `hasInputPrompt(lines)` | `has_input_prompt(lines)` |
-| `pickerOwnsInput(screen)` (new) | `picker_owns_input(screen)` |
+| `pickerOwnsInput(screen)` (exported from the package entry) | `picker_owns_input(screen)` (exported from the package entry) |
 | `hasBypassWarning(text)` | `has_bypass_warning(text)` |
 | `hasTrustModal(text)` | `has_trust_modal(text)` |
 | `hasStylePicker(text)` | `has_style_picker(text)` |

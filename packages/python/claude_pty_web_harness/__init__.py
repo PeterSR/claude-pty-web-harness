@@ -6,6 +6,10 @@ server.py is the reference FastAPI adapter.
 """
 from .harness import ClaudeHarness, HARNESS_NAMESPACE, PickerOpenError
 from .jsonl import find_jsonl_path, parse_entry, JsonlTailer
+# Screen predicates, exported for the same reason as in the TS port: a consumer
+# that drives pickers itself needs the same answer send_prompt's guard uses,
+# and the alternative is a local reimplementation that drifts from this one.
+from .detect import picker_owns_input, ready_for_input, has_input_prompt
 # Connect-or-scream and socket resolution now live in the pupptyeer client;
 # re-export them so consumers keep a coherent surface without a local mirror.
 from ._pupptyeer import PupptyeerClient
@@ -20,4 +24,7 @@ __all__ = [
     "find_jsonl_path",
     "parse_entry",
     "JsonlTailer",
+    "picker_owns_input",
+    "ready_for_input",
+    "has_input_prompt",
 ]
