@@ -24,6 +24,15 @@ _PASTE_END = b"\x1b[201~"
 _PICKER_CHECK_SETTLE_MS = 150
 _PICKER_CHECK_TIMEOUT_MS = 1000
 
+# How often the exit watcher polls list_sessions() to catch a tracked session
+# whose pty died on its own (a crash, an /exit, an OOM, a daemon restart)
+# without ever passing through kill(). A few hundred ms of latency to notice
+# a death doesn't matter for a status a UI renders, and this call covers
+# every tracked session at once, not one call per session. Mirrors
+# EXIT_WATCH_INTERVAL_MS in harness.ts (same name, same value in
+# milliseconds - divided by 1000 at the asyncio.sleep call site below).
+EXIT_WATCH_INTERVAL_MS = 2000
+
 
 def _normalize_root(path: str) -> str:
     return os.path.abspath(os.path.expanduser(path))
@@ -98,6 +107,7 @@ class ClaudeHarness:
         self._allowed_roots = [_normalize_root(r) for r in (allowed_roots or [])]
         self._sessions: dict[str, _Session] = {}
         self._listeners: List[Listener] = []
+        self._exit_watch_task: Optional[asyncio.Task] = None
 
     @classmethod
     async def create(
@@ -217,6 +227,7 @@ class ClaudeHarness:
             created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         )
         self._sessions[session_id] = s
+        self._ensure_exit_watch()
 
         def on_image(data: str, media_type: str) -> Tuple[str, int]:
             # Decode, hash, and stash the bytes as the JSONL is parsed, so a
@@ -425,19 +436,144 @@ class ClaudeHarness:
         await asyncio.to_thread(self._client.write_pane, s.pty_id, b"\x03")  # Ctrl-C
 
     async def kill(self, session_id: str) -> None:
-        s = self._sessions.pop(session_id, None)
+        s = self._sessions.get(session_id)
         if not s:
             return
+        try:
+            await asyncio.to_thread(self._client.kill, s.pty_id)
+        except Exception:
+            pass
+        await self._transition_exited(s)
+
+    # --- exit watcher -------------------------------------------------------
+    # Nothing else in this class subscribes to the daemon's unsolicited
+    # messages (no on_event, no attach), so a pty that dies on its own -
+    # crash, /exit, OOM, a daemon restart - would otherwise leave its session
+    # tracked forever with a stale status and every prompt to it silently
+    # discarded (write_pane returns None with no way to report a failed
+    # delivery). This polls list_sessions() instead of attaching, because
+    # attach streams every byte of pty output with no way to opt out - see
+    # .agent-workspace/session-exit-watcher.md for the probe that ruled it
+    # out. Mirrors the TS core's watchExits/ensureExitWatch/transitionExited.
+
+    async def _transition_exited(self, s: _Session) -> None:
+        """The one place a session becomes "exited": cancel its tasks, await
+        their cancellation, flip status, emit the status event, and drop it
+        from the tracked map. Both kill() (an explicit request) and the exit
+        watcher (the pty died on its own) funnel through this, so the two can
+        never drift into producing different end states for what a listener
+        sees as the same transition.
+
+        No-ops if `s` is no longer the tracked entry for its id - it was
+        already transitioned by the other path (e.g. kill() and the watcher
+        racing on the same session across kill()'s own await). Cheap, and it
+        makes a double "exited" emission structurally impossible rather than
+        merely unlikely."""
+        if self._sessions.get(s.id) is not s:
+            return
+        self._sessions.pop(s.id, None)
         for t in s.tasks:
             t.cancel()
         # Await the cancelled tasks so they finish unwinding instead of
         # surfacing "Task was destroyed but it is pending" warnings.
         await asyncio.gather(*s.tasks, return_exceptions=True)
-        try:
-            await asyncio.to_thread(self._client.kill, s.pty_id)
-        except Exception:
-            pass
         s.status = "exited"
-        self._emit("status", session_id, "exited")
+        self._emit("status", s.id, "exited")
         # No separate blob cleanup needed: s.blobs is just a field on the
         # _Session object already popped above, so it's freed with it.
+        # Nothing left to poll for; don't keep the watcher task alive for
+        # sessions that no longer exist. See _ensure_exit_watch's docstring
+        # for why teardown lives here rather than on some harness-level
+        # close() - there is none in this port either (checked both).
+        if not self._sessions and self._exit_watch_task is not None:
+            task = self._exit_watch_task
+            # Don't cancel (or clear the field for) the task we're running
+            # inside - the same self-cancellation hazard _mark_failed avoids.
+            # _transition_exited can be reached from _watch_exits_once,
+            # itself running inside this very task, mid for-loop over
+            # possibly several dying sessions; cancelling it here would throw
+            # CancelledError into that loop at its next await and cut the
+            # round short before every session in it was reconciled.
+            # _watch_exits_loop's own post-poll check clears the field and
+            # returns instead, once the round already in progress has
+            # actually finished - leaving the field set (not None) until
+            # then also stops _ensure_exit_watch from reading "still running
+            # this last round" as "gone" and spinning up a redundant second
+            # task for a session created in the same window.
+            if task is not asyncio.current_task():
+                self._exit_watch_task = None
+                task.cancel()
+
+    def _ensure_exit_watch(self) -> None:
+        """Start the exit watcher task if it isn't already running. Called
+        whenever a session starts being tracked (create_session); a no-op
+        once the task exists. ClaudeHarness has no close()/dispose() in
+        either port, so there is no harness-level lifecycle to hook a
+        teardown into. Tying the task's lifetime to the tracked-session count
+        instead - started here, stopped in _transition_exited once the last
+        one is gone - is "whatever lifecycle exists": it can't outlive the
+        harness's actual work, and a harness that is simply dropped without
+        ever killing its sessions is no worse off than it already was (its
+        sessions, and now its watcher, live as long as something still
+        references them)."""
+        if self._exit_watch_task is not None and not self._exit_watch_task.done():
+            return
+        self._exit_watch_task = asyncio.create_task(self._watch_exits_loop())
+
+    async def _watch_exits_loop(self) -> None:
+        while True:
+            await asyncio.sleep(EXIT_WATCH_INTERVAL_MS / 1000)
+            await self._watch_exits_once()
+            if not self._sessions:
+                # Last tracked session is already gone (this same poll may
+                # have been what removed it); stop rather than keep polling
+                # for nothing. Clearing the field here rather than in
+                # _transition_exited is what lets _ensure_exit_watch tell
+                # "this task is still finishing its last round" apart from
+                # "this task is actually gone" - see _transition_exited's
+                # comment. A new session later calls _ensure_exit_watch and
+                # gets a fresh task.
+                self._exit_watch_task = None
+                return
+
+    async def _watch_exits_once(self) -> None:
+        """One poll of the exit watcher: ask the daemon which pty sessions
+        are still around and reconcile every session THIS harness tracks
+        against it.
+
+        A failed list_sessions() is an absence of information, not evidence
+        of death - a dropped daemon connection must not read as every
+        tracked session dying at once - so any error here aborts the round
+        before a single session is touched; there is no code path from "the
+        call raised" to _transition_exited. This is the load-bearing
+        behavior of this method; it is enforced by the early `return` inside
+        the except below, not by a comment elsewhere hoping every future
+        edit remembers it.
+
+        list_sessions() also returns the other port's sessions, since TS and
+        Python share HARNESS_NAMESPACE. Reconciling by looking up each
+        TRACKED pty_id in the result - rather than iterating the result and
+        matching outward - means a foreign pty_id is never even considered,
+        let alone acted on: this loop only ever visits self._sessions."""
+        try:
+            infos = await asyncio.to_thread(self._client.list_sessions)
+        except Exception:
+            return
+        by_pty_id = {info.get("id"): info for info in infos}
+        for s in list(self._sessions.values()):
+            info = by_pty_id.get(s.pty_id)
+            # Absent from the list, or present and explicitly not alive, both
+            # mean the pty is gone. There is deliberately no grace period for
+            # a session that has never yet been seen alive: new_session()
+            # only returns after the daemon has registered the session, so a
+            # tracked pty_id is listed from the moment we know it exists
+            # (verified against the real daemon over repeated
+            # create-then-list-immediately rounds, with no sleep, and it was
+            # never once missing). An earlier version required one prior
+            # alive sighting before trusting an absence, guarding a race that
+            # does not exist, and it silently cost the case that matters
+            # most: a session dying within the first poll interval was then
+            # never reported dead at all.
+            if info is not None and info.get("alive") is not False:
+                continue
+            await self._transition_exited(s)

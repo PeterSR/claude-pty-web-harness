@@ -7,14 +7,32 @@
 // private fields the same way a hand-rolled test double always has to when a
 // class exposes no seam for it. sendPrompt only ever reads `session.ptyId`,
 // so the fake session doesn't need a real tailer or any other Session field.
+//
+// The exit-watcher tests below (watchExits:) follow the same approach: the
+// harness is built directly and never goes through createSession(), so the
+// real setInterval-driven watcher never starts. Instead each test calls the
+// private `watchExits()` method directly (also via a cast) to run exactly one
+// poll on demand - no real or fake timers needed at all, so the suite stays
+// fast and deterministic.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Screen } from "pupptyeer-client";
+import type { Screen, SessionInfo } from "pupptyeer-client";
 import { ClaudeHarness, PickerOpenError } from "./harness.js";
 
 class FakeClient {
   writes: string[] = [];
   captureCalls = 0;
+  listSessionsCalls = 0;
+  /**
+   * Scripts what listSessions() resolves (or rejects) to across successive
+   * calls. While more than one entry remains, each call shifts one off; once
+   * exactly one is left, it is returned (or thrown) on every further call
+   * without being consumed. That lets a test script an exact per-poll
+   * sequence (e.g. [[s1], []] - present, then gone) or set a single
+   * steady-state value/error that holds across as many polls as it drives.
+   */
+  listSessionsResults: Array<SessionInfo[] | Error> = [[]];
+
   constructor(
     private readonly screen: Screen | null = null,
     private readonly rejectCapture = false,
@@ -32,6 +50,13 @@ class FakeClient {
     this.captureCalls++;
     if (this.rejectCapture) throw new Error("simulated capture failure");
     return this.screen ?? emptyScreen();
+  }
+
+  async listSessions(): Promise<SessionInfo[]> {
+    this.listSessionsCalls++;
+    const next = this.listSessionsResults.length > 1 ? this.listSessionsResults.shift()! : this.listSessionsResults[0];
+    if (next instanceof Error) throw next;
+    return next;
   }
 }
 
@@ -123,4 +148,141 @@ test("sendPrompt: an unknown session id throws before ever capturing", async () 
   (h as any).client = fake;
   await assert.rejects(h.sendPrompt("nope", "hello"), /unknown session/);
   assert.equal(fake.captureCalls, 0);
+});
+
+// --- exit watcher -----------------------------------------------------------
+
+/** A SessionInfo as listSessions() would return it, keyed by ptyId (its `id`). */
+function sessionInfo(ptyId: string, alive = true): SessionInfo {
+  return {
+    id: ptyId,
+    namespace: "claude-pty-web-harness",
+    command: "claude",
+    cols: 120,
+    rows: 40,
+    created: "2026-01-01T00:00:00.000Z",
+    last_activity: "2026-01-01T00:00:00.000Z",
+    attached: 0,
+    alive,
+  };
+}
+
+/**
+ * A harness wired to `fake`, with the given sessions pre-seeded directly into
+ * the private map (the same cast-based seam harnessWithSession above uses).
+ * watchExits/transitionExited only ever touch ptyId, status, and
+ * tailer.stop(), so that's all each fake session needs.
+ */
+function harnessWithSessions(fake: FakeClient, sessions: Record<string, { ptyId: string }>): ClaudeHarness {
+  const h = new ClaudeHarness();
+  (h as any).client = fake;
+  for (const [id, opts] of Object.entries(sessions)) {
+    (h as any).sessions.set(id, {
+      id,
+      ptyId: opts.ptyId,
+      status: "ready",
+      tailer: {
+        stopped: false,
+        stop(this: { stopped: boolean }) {
+          this.stopped = true;
+        },
+      },
+    });
+  }
+  return h;
+}
+
+/** Collects ("status" event) calls as they fire, in order. */
+function collectStatusEvents(h: ClaudeHarness): Array<[string, string]> {
+  const events: Array<[string, string]> = [];
+  h.on("status", (id: string, status: string) => events.push([id, status]));
+  return events;
+}
+
+test("watchExits: a tracked session missing from listSessions transitions to exited", async () => {
+  const fake = new FakeClient();
+  fake.listSessionsResults = [[]]; // steady-state: pty-1 never appears again
+  const h = harnessWithSessions(fake, { s1: { ptyId: "pty-1" } });
+  const events = collectStatusEvents(h);
+
+  await (h as any).watchExits();
+
+  assert.deepEqual(events, [["s1", "exited"]]);
+  assert.equal(h.get("s1"), undefined, "gone from get()");
+  assert.equal(h.list().length, 0, "gone from list()");
+});
+
+test("watchExits: a session present and alive is left alone across several polls", async () => {
+  const fake = new FakeClient();
+  fake.listSessionsResults = [[sessionInfo("pty-1", true)]]; // steady-state: always present and alive
+  const h = harnessWithSessions(fake, { s1: { ptyId: "pty-1" } });
+  const events = collectStatusEvents(h);
+
+  await (h as any).watchExits();
+  await (h as any).watchExits();
+  await (h as any).watchExits();
+
+  assert.equal(events.length, 0, "no status event for a live session");
+  assert.equal(h.get("s1")?.status, "ready");
+});
+
+test("watchExits: a session present with alive:false transitions to exited", async () => {
+  const fake = new FakeClient();
+  fake.listSessionsResults = [[sessionInfo("pty-1", false)]];
+  const h = harnessWithSessions(fake, { s1: { ptyId: "pty-1" } });
+  const events = collectStatusEvents(h);
+
+  await (h as any).watchExits();
+
+  assert.deepEqual(events, [["s1", "exited"]]);
+  assert.equal(h.get("s1"), undefined);
+});
+
+test("watchExits: a failing listSessions marks nothing, across repeated failures", async () => {
+  const fake = new FakeClient();
+  fake.listSessionsResults = [new Error("simulated dropped daemon connection")];
+  const h = harnessWithSessions(fake, { s1: { ptyId: "pty-1" } });
+  const events = collectStatusEvents(h);
+
+  await (h as any).watchExits();
+  await (h as any).watchExits();
+  await (h as any).watchExits();
+
+  assert.equal(events.length, 0, "an error must never be read as evidence of death");
+  assert.equal(h.get("s1")?.status, "ready");
+  assert.equal(fake.listSessionsCalls, 3);
+});
+
+test("watchExits: a ptyId this harness never created is ignored entirely", async () => {
+  const fake = new FakeClient();
+  // s1's own ptyId is present and alive (so this isn't also exercising a
+  // death), plus one extra entry - another port's session in the shared
+  // namespace - that this harness never tracked.
+  fake.listSessionsResults = [[sessionInfo("pty-1", true), sessionInfo("someone-elses-pty", false)]];
+  const h = harnessWithSessions(fake, { s1: { ptyId: "pty-1" } });
+  const events = collectStatusEvents(h);
+
+  await (h as any).watchExits();
+
+  assert.equal(events.length, 0, "a foreign ptyId must produce no event and not crash");
+  assert.equal(h.get("s1")?.status, "ready");
+});
+
+test("watchExits: a session that dies before any poll ever saw it alive is still detected", async () => {
+  const fake = new FakeClient();
+  fake.listSessionsResults = [[]]; // died within the first poll interval
+  const h = harnessWithSessions(fake, { s1: { ptyId: "pty-1" } });
+  const events = collectStatusEvents(h);
+
+  await (h as any).watchExits();
+
+  // An earlier version required one prior alive sighting before trusting an
+  // absence, to guard a create-then-list race. Probing the real daemon showed
+  // that race does not exist (newSession only resolves once the session is
+  // registered, and a create-then-list-immediately loop never once missed it),
+  // while the guard silently lost exactly this case: a session dying inside
+  // the first interval was never reported dead at all. Caught by an end to end
+  // test against a real daemon that the fakes here had passed.
+  assert.deepEqual(events, [["s1", "exited"]]);
+  assert.equal(h.get("s1"), undefined);
 });

@@ -1,6 +1,6 @@
 {
   "name": "@petersr/claude-pty-web-harness-core",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Transport-agnostic core: drive Claude Code in a pupptyeer pty, stream its JSONL as chat events.",
   "keywords": [
     "claude",
@@ -49,7 +49,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@petersr/claude-pty-web-harness-protocol": "^0.3.0",
+    "@petersr/claude-pty-web-harness-protocol": "^0.3.1",
     "pupptyeer-client": "^0.9.0"
   },
   "devDependencies": {

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { resolve as resolvePath, sep } from "node:path";
 import { PupptyeerClient } from "pupptyeer-client";
-import type { Screen } from "pupptyeer-client";
+import type { Screen, SessionInfo } from "pupptyeer-client";
 import { JsonlTailer } from "./jsonl.js";
 import type { ImageSink } from "./jsonl.js";
 import { decodeImage } from "./blob.js";
@@ -41,6 +41,17 @@ const PASTE_END = "\x1b[201~";
 // sitting still on screen - see sendPrompt's doc comment for the argument.
 const PICKER_CHECK_SETTLE_MS = 150;
 const PICKER_CHECK_TIMEOUT_MS = 1000;
+
+/**
+ * How often the exit watcher polls listSessions() to catch a tracked session
+ * whose pty died on its own (a crash, an /exit, an OOM, a daemon restart)
+ * without ever passing through kill(). A few hundred ms of latency to notice
+ * a death doesn't matter for a status a UI renders, and this call covers
+ * every tracked session at once, not one call per session. Mirrored in the
+ * Python port as EXIT_WATCH_INTERVAL_MS (same name, same value in
+ * milliseconds - asyncio.sleep there just divides by 1000 at the call site).
+ */
+const EXIT_WATCH_INTERVAL_MS = 2000;
 
 /**
  * Thrown by createSession when the requested cwd resolves outside the configured
@@ -143,6 +154,11 @@ export class ClaudeHarness extends EventEmitter {
   private readiness: "screen" | "delay" = "screen";
   private allowedRoots: string[] = [];
   private readonly sessions = new Map<string, Session>();
+  private exitWatchTimer: NodeJS.Timeout | undefined;
+  // Guards against an overlapping poll if a listSessions() round-trip ever
+  // outlasts the interval, the same reentrancy guard JsonlTailer's tick()
+  // uses for the same reason.
+  private exitWatchInFlight = false;
 
   static async create(opts: HarnessOptions = {}): Promise<ClaudeHarness> {
     const h = new ClaudeHarness();
@@ -252,6 +268,7 @@ export class ClaudeHarness extends EventEmitter {
       blobs,
     };
     this.sessions.set(id, session);
+    this.ensureExitWatch();
 
     // Stream structured chat events from the persisted JSONL.
     tailer.on("event", (ev: ChatEvent) => {
@@ -460,16 +477,113 @@ export class ClaudeHarness extends EventEmitter {
   async kill(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
-    session.tailer.stop();
     try {
       await this.client.kill(session.ptyId);
     } catch {
       // already gone
     }
+    this.transitionExited(id, session);
+  }
+
+  /**
+   * The one place a session becomes "exited": stop its JSONL tailer, flip
+   * status, emit the "status" event, and drop it from the tracked map. Both
+   * kill() (an explicit request) and the exit watcher (the pty died on its
+   * own) funnel through this, so the two can never drift into producing
+   * different end states for what a listener sees as the same transition.
+   *
+   * No-ops if `session` is no longer the tracked entry for `id` - it was
+   * already transitioned by the other path (e.g. kill() and the watcher
+   * racing on the same session across kill()'s own await). Cheap, and it
+   * makes a double "exited" emission structurally impossible rather than
+   * merely unlikely.
+   */
+  private transitionExited(id: string, session: Session): void {
+    if (this.sessions.get(id) !== session) return;
+    session.tailer.stop();
     session.status = "exited";
     this.emit("status", id, "exited");
     // No separate blob cleanup needed: session.blobs is just a field on the
     // Session object this drops, so it's freed with the rest of the session.
     this.sessions.delete(id);
+    // Nothing left to poll for; don't keep the timer (and the process) alive
+    // for sessions that no longer exist. See ensureExitWatch's doc comment
+    // for why teardown lives here rather than on some harness-level close().
+    if (this.sessions.size === 0) this.stopExitWatch();
+  }
+
+  /**
+   * Start the exit watcher if it isn't already running. Called whenever a
+   * session starts being tracked (createSession); a no-op once the timer
+   * exists. ClaudeHarness has no close()/dispose() in this port (nor in the
+   * Python port - checked both), so there is no harness-level lifecycle to
+   * hook a teardown into. Tying the timer's lifetime to the tracked-session
+   * count instead - started here, stopped in transitionExited once the last
+   * one is gone - is "whatever lifecycle exists": it can't outlive the
+   * harness's actual work, and a harness that is simply dropped without ever
+   * killing its sessions is no worse off than it already was (its sessions,
+   * and now its watcher, live as long as something still references them).
+   */
+  private ensureExitWatch(): void {
+    if (this.exitWatchTimer) return;
+    this.exitWatchTimer = setInterval(() => {
+      void this.watchExits();
+    }, EXIT_WATCH_INTERVAL_MS);
+  }
+
+  private stopExitWatch(): void {
+    if (!this.exitWatchTimer) return;
+    clearInterval(this.exitWatchTimer);
+    this.exitWatchTimer = undefined;
+  }
+
+  /**
+   * One poll of the exit watcher: ask the daemon which pty sessions are
+   * still around and reconcile every session THIS harness tracks against it.
+   *
+   * A failed listSessions() is an absence of information, not evidence of
+   * death - a dropped daemon connection must not read as every tracked
+   * session dying at once - so any error here aborts the round before a
+   * single session is touched; there is no code path from "the call threw"
+   * to transitionExited. This is the load-bearing behavior of this method;
+   * it is enforced by the early `return` inside the catch below, not by a
+   * comment elsewhere hoping every future edit remembers it.
+   *
+   * listSessions() also returns the other port's sessions, since TS and
+   * Python share HARNESS_NAMESPACE. Reconciling by looking up each TRACKED
+   * ptyId in the result - rather than iterating the result and matching
+   * outward - means a foreign ptyId is never even considered, let alone
+   * acted on: this loop only ever visits `this.sessions`.
+   */
+  private async watchExits(): Promise<void> {
+    if (this.exitWatchInFlight) return;
+    this.exitWatchInFlight = true;
+    try {
+      let infos: SessionInfo[];
+      try {
+        infos = await this.client.listSessions();
+      } catch {
+        return;
+      }
+      const byPtyId = new Map(infos.map((info) => [info.id, info]));
+      for (const session of [...this.sessions.values()]) {
+        const info = byPtyId.get(session.ptyId);
+        // Absent from the list, or present and explicitly not alive, both
+        // mean the pty is gone. There is deliberately no grace period for a
+        // session that has never yet been seen alive: newSession() only
+        // resolves after the daemon has registered the session, so a tracked
+        // ptyId is listed from the moment we know it exists (verified
+        // against the real daemon over repeated create-then-list-immediately
+        // rounds, with no sleep, and it was never once missing). An earlier
+        // version required one prior alive sighting before trusting an
+        // absence, guarding a race that does not exist, and it silently cost
+        // the case that matters most: a session dying within the first poll
+        // interval was then never reported dead at all.
+        if (info && info.alive !== false) continue;
+        this.transitionExited(session.id, session);
+      }
+    } finally {
+      this.exitWatchInFlight = false;
+    }
   }
 }

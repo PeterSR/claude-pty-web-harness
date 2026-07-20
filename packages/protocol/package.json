@@ -1,6 +1,6 @@
 {
   "name": "@petersr/claude-pty-web-harness-protocol",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Shared wire types for the claude-pty-web-harness (zero runtime).",
   "keywords": [
     "claude",
