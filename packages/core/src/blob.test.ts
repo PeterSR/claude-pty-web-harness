@@ -29,11 +29,30 @@ test("decodeImage: decodes properly-padded base64 and reports the matching blobI
   assert.equal(bytes.toString(), "hello world");
 });
 
-test("decodeImage: never throws, even for improperly padded base64 (Node's Buffer.from is lenient about padding)", () => {
-  // This is the exact input that diverges from Python's base64.b64decode
-  // (which requires a length that's a multiple of 4 and raises otherwise);
-  // decodeImage does not try to reconcile that here - see its doc comment
-  // and PARITY.md. It just must not throw.
-  const { bytes } = decodeImage("abc");
-  assert.equal(bytes.length, 2);
+test("decodeImage: rejects improperly padded base64 rather than leniently decoding it", () => {
+  // Node's Buffer.from would happily turn "abc" into 2 bytes while Python's
+  // base64.b64decode raises on the same string, which made one image block
+  // parse into an "image" ContentPart in TS and an "unknown" one in Python.
+  // Validating first is what reconciles the two ports; see the doc comment on
+  // decodeImage and the blob-decode-*-rejected conformance cases.
+  assert.throws(() => decodeImage("abc"));
+  assert.throws(() => decodeImage("YQ"));
+});
+
+test("decodeImage: accepts the malformed-looking inputs both decoders already agreed on", () => {
+  // Guards against over-tightening: these are not well-formed payloads either,
+  // but Node and Python both decode them to zero bytes, so rejecting them
+  // would break working behavior for no parity gain.
+  assert.equal(decodeImage("").bytes.length, 0);
+  assert.equal(decodeImage("====").bytes.length, 0);
+  // Whitespace is stripped before validating, so a wrapped payload still works.
+  assert.equal(decodeImage("YW  Jj").bytes.toString(), "abc");
+});
+
+test("decodeImage: strips only ASCII whitespace, so the two ports see the same input", () => {
+  // JS's \s matches more than Python's (U+00A0, U+FEFF and friends), so both
+  // ports spell out an ASCII class instead. A non-breaking space must survive
+  // stripping and then fail validation, in both languages.
+  assert.throws(() => decodeImage(" YWJj"));
+  assert.throws(() => decodeImage("YWJj﻿"));
 });

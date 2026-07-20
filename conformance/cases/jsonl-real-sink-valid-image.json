@@ -1,0 +1,46 @@
+{
+  "name": "jsonl-real-sink-valid-image",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "sink": "real",
+  "comment": "Runs parseEntry against the production decode rather than the fixed stub, so the blobId and byte count here are the real ones and must match across both ports. Pairs with jsonl-real-sink-unpadded-image-rejected: together they pin that both ports agree on what a valid payload produces AND on what an invalid one produces.",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "is_error": false,
+            "content": [
+              { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "aGVsbG8gd29ybGQ=" } }
+            ]
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "tu1",
+      "text": "",
+      "isError": false,
+      "parts": [
+        {
+          "type": "image",
+          "blobId": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+          "mediaType": "image/png",
+          "bytes": 11
+        }
+      ]
+    }
+  ]
+}

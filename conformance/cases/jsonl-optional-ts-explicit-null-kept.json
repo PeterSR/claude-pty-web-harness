@@ -1,0 +1,11 @@
+{
+  "name": "jsonl-optional-ts-explicit-null-kept",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "comment": "The other half of jsonl-optional-ts-absent-omits-key: the fix keys on whether the source line carried the field, not on the value being null, so an explicit \"timestamp\": null still crosses as null in both ports. A naive strip-all-None would have dropped it here and diverged in the opposite direction.",
+  "input": {
+    "entry": { "type": "assistant", "uuid": "a1", "timestamp": null, "message": { "role": "assistant", "content": [{ "type": "text", "text": "hi" }] } },
+    "lineNo": 1
+  },
+  "expect": [{ "id": "a1:a:0", "ts": null, "kind": "assistant_text", "text": "hi" }]
+}

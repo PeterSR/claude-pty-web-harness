@@ -30,16 +30,26 @@ CASES_DIR = os.path.join(HERE, "cases")
 # its own golden-vector cases) and decode-byte-count correctness are
 # deliberately out of scope here - this stub exists only to prove parse_entry
 # wires the sink correctly and reports back exactly what it returns, nothing
-# recomputed independently. That's also why this layer can safely fuzz
-# unpadded/malformed base64 (see jsonl-tool-result-image-bytes-come-from-sink
-# in cases/): since nothing here decodes, there's nothing for TS/Python's
-# differing decode leniency (see PARITY.md) to disagree about.
+# recomputed independently. Cases that need the real decode opt in with
+# "sink": "real" (see _real_image_sink); those are what prove both ports
+# accept and reject the same payloads.
 STUB_BLOB_ID = "stub-blob-id"
 STUB_BYTES = 999999
 
 
 def _stub_image_sink(data, media_type):
     return STUB_BLOB_ID, STUB_BYTES
+
+
+def _real_image_sink(data, media_type):
+    """The stub above is right for proving wiring, but a corpus built only on
+    it is blind to the one thing that actually crosses the language boundary
+    here: whether both ports' decoders accept and reject the same payloads. A
+    case with "sink": "real" runs parse_entry against the production decode
+    instead, so a divergence shows up as a different ContentPart type rather
+    than hiding behind a fixed stub value."""
+    blob_id, raw = decode_image(data)
+    return blob_id, len(raw)
 
 
 def canon(value):
@@ -70,7 +80,8 @@ def run(kase):
 
     if mod == "jsonl":
         if fn == "parseEntry":
-            return parse_entry(inp["entry"], inp["lineNo"], _stub_image_sink)
+            sink = _real_image_sink if kase.get("sink") == "real" else _stub_image_sink
+            return parse_entry(inp["entry"], inp["lineNo"], sink)
         raise ValueError(f"unknown jsonl fn: {fn}")
 
     if mod == "detect":
@@ -118,10 +129,20 @@ def main():
     for file in files:
         with open(file, "r", encoding="utf-8") as fh:
             kase = json.load(fh)
+        # `"expect": {"throws": true}` pins rejection itself as the contract,
+        # so both ports must refuse the same inputs rather than one raising
+        # and the other quietly returning something.
+        wants_throw = isinstance(kase.get("expect"), dict) and kase["expect"].get("throws") is True
         try:
             got = run(kase)
         except Exception as err:  # noqa: BLE001
+            if wants_throw:
+                continue
             print(f"FAIL[python] {kase['name']}: threw {err}", file=sys.stderr)
+            failed = True
+            continue
+        if wants_throw:
+            print(f"FAIL[python] {kase['name']}: expected a throw, got {canon(got)}", file=sys.stderr)
             failed = True
             continue
         got_canon = canon(got)

@@ -100,9 +100,9 @@ function blockToPart(block: Record<string, unknown>, onImage: ImageSink | undefi
         const { blobId, bytes } = onImage({ base64, mediaType });
         return { type: "image", blobId, mediaType, bytes };
       } catch {
-        // The sink's decode rejected this payload - most commonly malformed
-        // or unconventionally-padded base64 that one language's decoder
-        // accepts leniently and the other's rejects (see PARITY.md). Fall
+        // The sink's decode rejected this payload - malformed base64, which
+        // blob.ts and blob.py validate identically so both ports reject the
+        // same strings and produce the same "unknown" part here. Fall
         // through to the unknown fallback below instead of letting this
         // throw out of parseEntry: the content came from an MCP tool and is
         // not trusted to be well-formed.

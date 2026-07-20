@@ -1,0 +1,8 @@
+{
+  "name": "jsonl-optional-result-fields-absent",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "comment": "A bare result line: every optional field (subtype, durationMs, costUsd, text) is absent, so none of their keys may appear on the wire in either port.",
+  "input": { "entry": { "type": "result", "uuid": "r1" }, "lineNo": 1 },
+  "expect": [{ "id": "r1", "kind": "result" }]
+}

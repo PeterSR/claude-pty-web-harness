@@ -53,14 +53,30 @@ to satisfy it, not the other way around.
   divergence - a `tool_result` image block with unpadded, improperly-padded
   base64 (`jsonl-tool-result-image-bytes-come-from-sink`), pinning that the
   reported `bytes` is exactly whatever the sink returns, not an independent
-  recomputation. All jsonl cases run through the same stub image sink -
+  recomputation. jsonl cases run through a stub image sink by default -
   `() => ({blobId: "stub-blob-id", bytes: 999999})`, a fixed value regardless
   of input, never decoding the base64 at all - so hash correctness (`blob`'s
-  job below) and decode-byte-count correctness are both out of scope here.
-  Because nothing at this layer decodes, jsonl-level cases can safely include
-  malformed/unpadded base64 without hitting the TS/Python decode-leniency
-  difference (see PARITY.md) - the only thing to disagree about would be an
-  independent decode, and there isn't one anymore.
+  job below) and decode-byte-count correctness are both out of scope for them.
+
+  A case can opt into the **real** decode with `"sink": "real"`, and some must.
+  A corpus built only on the stub is blind to the one thing that actually
+  crosses the language boundary here: whether both ports accept and reject the
+  same payloads. That blindness let a real divergence through once - the same
+  unpadded-base64 image block became an `image` part in TS and an `unknown`
+  one in Python, invisible to every stub-sink case because nothing at that
+  layer decoded. `jsonl-real-sink-valid-image` and
+  `jsonl-real-sink-unpadded-image-rejected` are the pair that pin both
+  directions. Reach for `"sink": "real"` whenever the behaviour under test
+  depends on what the decoder does, and leave the stub in place when the case
+  is only about wiring.
+
+- **Optional-field presence** (`jsonl-optional-*`): `ts`, `tool_use.input` and
+  the `result` metadata fields are optional in the protocol, and "absent" must
+  serialize differently from "explicitly null" in *both* ports - key omitted
+  versus `null` on the wire. The TS runner's `canon()` models
+  `JSON.stringify`'s key-dropping so this is actually comparable; before it
+  did, an `undefined`-valued key and a `None`-valued one looked identical to
+  the comparison and the divergence could not be seen.
 
 - **`conformance/cases/generated/`**: a much larger, deterministic fuzz corpus
   covering the same `jsonl` module against generated malformed/edge-case

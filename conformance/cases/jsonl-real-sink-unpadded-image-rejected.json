@@ -1,0 +1,39 @@
+{
+  "name": "jsonl-real-sink-unpadded-image-rejected",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "sink": "real",
+  "comment": "The regression this whole real-sink case class exists for. 'abc' is malformed base64; Node's decoder used to accept it leniently while Python's raised, so this exact entry produced an 'image' ContentPart in TS and an 'unknown' one in Python - a wire-visible divergence the stub-sink corpus could not see, because nothing at that layer decoded. Both ports now validate before decoding and both land on the unknown part below.",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "is_error": false,
+            "content": [
+              { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "abc" } }
+            ]
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "tu1",
+      "text": "",
+      "isError": false,
+      "parts": [{ "type": "unknown", "blockType": "image" }]
+    }
+  ]
+}

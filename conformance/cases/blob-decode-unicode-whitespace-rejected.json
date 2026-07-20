@@ -1,0 +1,8 @@
+{
+  "name": "blob-decode-unicode-whitespace-rejected",
+  "module": "blob",
+  "fn": "decodeImage",
+  "comment": "A non-breaking space (U+00A0) is not ASCII whitespace. Both ports strip only an explicit ASCII whitespace class before validating, rather than a regex \\s shorthand, because JS's \\s matches a wider set than Python's - a shared \\s would strip this character in TS and keep it in Python, handing the two decoders different input. Both reject.",
+  "input": { "base64": " YWJj" },
+  "expect": { "throws": true }
+}

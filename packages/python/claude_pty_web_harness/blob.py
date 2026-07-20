@@ -7,7 +7,18 @@ from __future__ import annotations
 
 import base64 as _base64
 import hashlib
+import re
 from typing import Tuple
+
+# ASCII whitespace only, spelled out rather than using \s: Python's \s and
+# JS's \s match different sets (JS also matches U+FEFF and friends), so a
+# shared \s would strip different characters in each port and hand the two
+# decoders different input. Mirrors WHITESPACE_RE in blob.ts.
+_WHITESPACE_RE = re.compile(r"[ \t\n\r\f\v]")
+# Base64 alphabet with trailing padding. Deliberately permissive about how
+# many "=" trail (both decoders agree on "====" -> zero bytes); the length
+# check in decode_image is what actually rejects the malformed cases.
+_BASE64_RE = re.compile(r"[A-Za-z0-9+/]*=*")
 
 
 def hash_image_bytes(data: bytes) -> str:
@@ -25,13 +36,20 @@ def decode_image(base64_data: str) -> Tuple[str, bytes]:
     ImageSink, so this exact decode+hash pairing is directly
     conformance-testable without a live harness.
 
-    `base64.b64decode(data, validate=False)` raises on improperly padded
-    input (e.g. "abc" raises here, where Node's `Buffer.from(str, "base64")`
-    leniently decodes it to 2 bytes). This function does not try to reconcile
-    that: it either produces the same answer Node's decoder would for
-    well-formed base64, or raises. A caller across the language boundary
-    (jsonl.py's _block_to_part) is the one that treats a raising sink as
-    "unknown" rather than trying to make the two decoders agree on padding
-    rules."""
-    raw = _base64.b64decode(base64_data, validate=False)
+    Validates before decoding, and raises on anything that fails, so that this
+    port and blob.ts accept and reject exactly the same strings. Without the
+    check the two disagree on improperly-padded input: `base64.b64decode`
+    raises on "abc", while Node's `Buffer.from(str, "base64")` never throws
+    and leniently decodes it to 2 bytes - which surfaced as the same image
+    block becoming an "unknown" ContentPart here and an "image" one in TS.
+    Rejecting in both is the reconciliation: a payload that isn't well-formed
+    base64 decodes to garbage bytes that would never render as an image
+    anyway, so an honest "unknown" part beats a blob_id pointing at junk.
+    Whitespace is stripped first (both decoders tolerate it), and the length
+    check is what rejects the genuinely malformed input. Mirrors decodeImage
+    in blob.ts."""
+    compact = _WHITESPACE_RE.sub("", base64_data)
+    if _BASE64_RE.fullmatch(compact) is None or len(compact) % 4 != 0:
+        raise ValueError("invalid base64 image payload")
+    raw = _base64.b64decode(compact, validate=False)
     return hash_image_bytes(raw), raw

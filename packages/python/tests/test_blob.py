@@ -35,14 +35,35 @@ class TestDecodeImage(unittest.TestCase):
         self.assertEqual(len(raw), 11)
         self.assertEqual(raw, b"hello world")
 
-    def test_raises_on_improperly_padded_base64_rather_than_guessing(self):
-        # This is the exact input that diverges from Node's Buffer.from
-        # (which leniently decodes "abc" to 2 bytes); decode_image does not
-        # try to reconcile that here - see its doc comment and PARITY.md. The
-        # caller (jsonl.py's _block_to_part) is what turns this into a
-        # graceful "unknown" part instead of a crash.
+    def test_rejects_improperly_padded_base64_rather_than_guessing(self):
+        # Node's Buffer.from would happily turn "abc" into 2 bytes while this
+        # raises on the same string, which made one image block parse into an
+        # "unknown" ContentPart here and an "image" one in TS. Validating first
+        # is what reconciles the two ports; see decode_image's docstring and
+        # the blob-decode-*-rejected conformance cases. The caller (jsonl.py's
+        # _block_to_part) turns the raise into a graceful "unknown" part.
         with self.assertRaises(Exception):
             decode_image("abc")
+        with self.assertRaises(Exception):
+            decode_image("YQ")
+
+    def test_accepts_the_malformed_looking_inputs_both_decoders_already_agreed_on(self):
+        # Guards against over-tightening: these are not well-formed payloads
+        # either, but Node and Python both decode them to zero bytes, so
+        # rejecting them would break working behavior for no parity gain.
+        self.assertEqual(decode_image("")[1], b"")
+        self.assertEqual(decode_image("====")[1], b"")
+        # Whitespace is stripped before validating, so a wrapped payload works.
+        self.assertEqual(decode_image("YW  Jj")[1], b"abc")
+
+    def test_strips_only_ascii_whitespace_so_both_ports_see_the_same_input(self):
+        # Python's \s and JS's \s match different sets (JS also matches U+00A0
+        # and U+FEFF), so both ports spell out an ASCII class instead. A
+        # non-breaking space must survive stripping and then fail validation.
+        with self.assertRaises(Exception):
+            decode_image(" YWJj")
+        with self.assertRaises(Exception):
+            decode_image("YWJj﻿")
 
 
 if __name__ == "__main__":

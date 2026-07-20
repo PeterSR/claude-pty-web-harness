@@ -1,0 +1,8 @@
+{
+  "name": "blob-decode-two-char-rejected",
+  "module": "blob",
+  "fn": "decodeImage",
+  "comment": "Same class as blob-decode-unpadded-rejected: 'YQ' is the unpadded form of 'YQ==' (which both ports do accept, decoding to 1 byte). Node decoded it leniently to 1 byte, Python raised. Both now reject.",
+  "input": { "base64": "YQ" },
+  "expect": { "throws": true }
+}

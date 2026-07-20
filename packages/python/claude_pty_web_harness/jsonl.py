@@ -75,13 +75,13 @@ def _block_to_part(block: dict, on_image: Optional[ImageSink], salvage_text: Opt
                 blob_id, byte_len = on_image(data, media_type)
                 return {"type": "image", "blobId": blob_id, "mediaType": media_type, "bytes": byte_len}
             except Exception:
-                # The sink's decode rejected this payload - most commonly
-                # malformed or unconventionally-padded base64 that one
-                # language's decoder accepts leniently and the other's
-                # rejects (see PARITY.md). Fall through to the unknown
-                # fallback below instead of letting this raise out of
-                # parse_entry: the content came from an MCP tool and is not
-                # trusted to be well-formed.
+                # The sink's decode rejected this payload - malformed base64,
+                # which blob.py and blob.ts validate identically so both
+                # ports reject the same strings and produce the same
+                # "unknown" part here. Fall through to the unknown fallback
+                # below instead of letting this raise out of parse_entry: the
+                # content came from an MCP tool and is not trusted to be
+                # well-formed.
                 pass
     if salvage_text is not None:
         return {"type": "unknown", "blockType": block_type, "text": salvage_text}
@@ -124,6 +124,17 @@ def _content_parts(content: Any, on_image: Optional[ImageSink]) -> Tuple[str, Op
 
     text = "".join(text_chunks)
     return (text, parts) if has_non_text else (text, None)
+
+
+def _copy_optional(ev: dict, ev_key: str, src: dict, src_key: str) -> None:
+    """Copy an optional field onto an event only when the source line actually
+    carried it. TS builds these events as object literals whose absent fields
+    are `undefined`, and JSON.stringify drops those keys; a dict here would
+    serialize them as explicit nulls and put keys on the wire the TS server
+    never sends. Keyed on presence rather than on the value being None, so an
+    explicit null in the source still crosses as null in both ports."""
+    if src_key in src:
+        ev[ev_key] = src.get(src_key)
 
 
 def parse_entry(entry: dict, line_no: int, on_image: Optional[ImageSink] = None) -> List[ChatEvent]:
@@ -186,12 +197,20 @@ def parse_entry(entry: dict, line_no: int, on_image: Optional[ImageSink] = None)
                 out.append({"id": f"{base_id}:t:{n}", "ts": ts, "kind": "thinking", "text": str(block.get("thinking") or block.get("text") or "")})
                 n += 1
             elif btype == "tool_use":
-                out.append({
+                ev = {
                     "id": f"{base_id}:tu:{n}", "ts": ts, "kind": "tool_use",
                     "name": str(block.get("name") or "tool"),
                     "toolUseId": str(block.get("id") or ""),
-                    "input": block.get("input"),
-                })
+                }
+                # Keyed on presence, not on the value being non-None: TS reads
+                # `block.input`, so an absent field is `undefined` and
+                # JSON.stringify drops the key, while an explicit `"input":
+                # null` survives as null. `.get()` alone would collapse those
+                # two cases into one and diverge from TS on whichever it
+                # guessed wrong.
+                if "input" in block:
+                    ev["input"] = block.get("input")
+                out.append(ev)
                 n += 1
             else:
                 # Unrecognized block type (e.g. redacted_thinking) used to
@@ -210,14 +229,27 @@ def parse_entry(entry: dict, line_no: int, on_image: Optional[ImageSink] = None)
         # turn_duration is claude's reliable end-of-turn marker; surface it as a
         # "turn complete" chip. Other system lines are noise.
         if entry.get("subtype") == "turn_duration":
-            out.append({"id": base_id, "ts": ts, "kind": "result", "subtype": "turn_duration", "durationMs": entry.get("duration_ms")})
+            ev = {"id": base_id, "ts": ts, "kind": "result", "subtype": "turn_duration"}
+            _copy_optional(ev, "durationMs", entry, "duration_ms")
+            out.append(ev)
 
     elif etype == "result":
-        out.append({
-            "id": base_id, "ts": ts, "kind": "result", "subtype": entry.get("subtype"),
-            "durationMs": entry.get("duration_ms"), "costUsd": entry.get("total_cost_usd"),
-            "text": entry.get("result"),
-        })
+        ev = {"id": base_id, "ts": ts, "kind": "result"}
+        _copy_optional(ev, "subtype", entry, "subtype")
+        _copy_optional(ev, "durationMs", entry, "duration_ms")
+        _copy_optional(ev, "costUsd", entry, "total_cost_usd")
+        _copy_optional(ev, "text", entry, "result")
+        out.append(ev)
+
+    # "ts" is optional in the protocol. TS reads `entry.timestamp`, so when the
+    # line has no timestamp the value is `undefined` and JSON.stringify omits
+    # the key entirely; a dict here would instead serialize `"ts": null` and
+    # put a key on the wire that the TS server never sends. Keyed on the source
+    # field's presence rather than on `ts` being None, so an explicit
+    # `"timestamp": null` still serializes as null in both ports.
+    if "timestamp" not in entry:
+        for ev in out:
+            ev.pop("ts", None)
 
     return out
 

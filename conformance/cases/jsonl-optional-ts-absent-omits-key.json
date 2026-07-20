@@ -1,0 +1,11 @@
+{
+  "name": "jsonl-optional-ts-absent-omits-key",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "comment": "Regression: `ts` is optional in the protocol. TS reads entry.timestamp, so an absent timestamp is undefined and JSON.stringify omits the key; Python built the same event as a dict and serialized \"ts\": null, putting a key on the wire the TS server never sends. protocol.py's whole reason for keeping ChatEvent a plain dict is byte-for-byte parity with the TS server, so this is pinned here rather than left to a docs note.",
+  "input": {
+    "entry": { "type": "assistant", "uuid": "a1", "message": { "role": "assistant", "content": [{ "type": "text", "text": "hi" }] } },
+    "lineNo": 1
+  },
+  "expect": [{ "id": "a1:a:0", "kind": "assistant_text", "text": "hi" }]
+}

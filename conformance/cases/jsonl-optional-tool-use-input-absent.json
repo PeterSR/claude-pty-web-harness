@@ -1,0 +1,11 @@
+{
+  "name": "jsonl-optional-tool-use-input-absent",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "comment": "Same absent-versus-null distinction as the ts cases, on tool_use.input: an absent input is undefined in TS and its key is dropped, so Python must omit it rather than emit null.",
+  "input": {
+    "entry": { "type": "assistant", "uuid": "a1", "timestamp": "t", "message": { "role": "assistant", "content": [{ "type": "tool_use", "id": "i", "name": "n" }] } },
+    "lineNo": 1
+  },
+  "expect": [{ "id": "a1:tu:0", "ts": "t", "kind": "tool_use", "name": "n", "toolUseId": "i" }]
+}

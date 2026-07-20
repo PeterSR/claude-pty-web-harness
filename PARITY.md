@@ -64,11 +64,17 @@ same way (a blobId is only a valid cache key / dedupe key if it is).
 | `decodeImage(base64: string): {blobId, bytes: Buffer}` | `decode_image(base64_data: str) -> Tuple[str, bytes]` |
 
 `decodeImage`/`decode_image` is the one decode per image (used by both the harness's `ImageSink`
-and this conformance-testable form): `Buffer.from(str, "base64")` never throws and is lenient
-about padding (`"abc"` -> 2 bytes), while Python's `base64.b64decode(str, validate=False)` raises
-on improperly padded input (`"abc"` -> `binascii.Error`). **This is intentional and not
-reconciled** - see "Known gaps" below. For well-formed, properly-padded base64 (every real image
-payload, and the only kind fuzzed into the shared corpus) both decode identically.
+and this conformance-testable form). The two languages' underlying decoders do **not** agree on
+their own: `Buffer.from(str, "base64")` never throws and leniently decodes `"abc"` to 2 bytes,
+while Python's `base64.b64decode` raises on the same string. Left alone that divergence was
+wire-visible - the same image block became an `image` ContentPart in TS and an `unknown` one in
+Python - so both ports **validate before decoding** and reject identically: strip ASCII whitespace
+(spelled out, because JS's `\s` matches a wider set than Python's), then require the base64
+alphabet with trailing padding and a length that is a multiple of 4. A payload that fails is not
+well-formed base64 and would decode to garbage that could never render, so an honest `unknown`
+part beats a blobId pointing at junk. Pinned by `blob-decode-*-rejected` and, at the layer where
+it actually surfaced, by the `sink: "real"` cases `jsonl-real-sink-valid-image` and
+`jsonl-real-sink-unpadded-image-rejected`.
 
 ## Harness (`packages/core/src/harness.ts` / `claude_pty_web_harness/harness.py`)
 
@@ -125,20 +131,22 @@ cookie/ticket helper - auth lives at the edge by design, so this is a hook only.
 
 ## Known gaps (found by the fuzz corpus, not fixed here - out of scope for this change)
 
-Building the generated fuzz corpus (`conformance/generate.mjs`) surfaced two pre-existing
-divergences unrelated to `ContentPart`/images. Recorded here rather than silently worked around, so
-they don't get rediscovered by surprise later; the generator deliberately avoids fuzzing into them
-(see the comments in `generate.mjs` next to each affected mutation) rather than fixing them, since
-both are systemic and would need their own scoped change.
+Building the generated fuzz corpus (`conformance/generate.mjs`) surfaced pre-existing divergences
+unrelated to `ContentPart`/images. Recorded here rather than silently worked around, so they don't
+get rediscovered by surprise later; the generator deliberately avoids fuzzing into them (see the
+comments in `generate.mjs` next to each affected mutation) rather than fixing them, since they are
+systemic and would need their own scoped change.
 
-- **Optional-field omission on the wire.** When a field is absent (e.g. an entry with no
-  `timestamp`, a `tool_use` block with no `input`), TS's object literals still carry the key with
-  value `undefined`, which `JSON.stringify` then *drops* entirely. Python's dicts carry the same
-  key with value `None`, which `json.dumps` *keeps* as `null`. Net effect: the same "field is
-  absent" JSONL input produces a wire message with no `ts` key at all from the TS server, but
-  `"ts": null` from the Python one. Only observable for a malformed/incomplete JSONL line (real
-  Claude Code transcripts always write these fields) and harmless to the existing renderers (which
-  treat both as falsy), but it is a real byte-level difference a strict consumer could notice.
+Note that **optional-field omission on the wire is no longer one of them.** TS object literals
+carry absent fields as `undefined` and `JSON.stringify` drops those keys, while Python dicts
+carried them as `None` and `json.dumps` kept them as `null`, so the same JSONL line produced no
+`ts` key from the TS server and `"ts": null` from the Python one. Python now copies optional
+fields only when the source line actually carried them, keyed on presence rather than on the value
+being `None`, so an explicit `"timestamp": null` still crosses as null in both. This was invisible
+to the corpus until the TS runner's `canon()` was taught to model `JSON.stringify` (it had been
+comparing in-memory objects, where an `undefined`-valued key is indistinguishable from a `null`
+one); it is pinned now by the `jsonl-optional-*` cases.
+
 - **`?? fallback` (TS) vs. `or fallback` (Python) disagree on falsy-but-not-null values.** `??`
   only substitutes for `null`/`undefined`; Python's `or` substitutes for *every* falsy value
   (`False`, `0`, `""`, `[]`, `{}`). Several fields in `jsonl.ts`/`jsonl.py` use this pattern

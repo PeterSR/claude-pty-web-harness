@@ -86,10 +86,12 @@ function addJsonl(name, entry, lineNo = 1) {
 
 /** A blob/decodeImage case: `expect` is computed by actually running
  * decodeImage, so it is correct by construction. Only ever called with
- * well-formed base64 here (the fuzzer's random-bytes category below) - the
- * one class of input where TS/Python decode disagree (improperly padded
- * base64) is intentionally not fuzzed into the shared corpus; see
- * PARITY.md and the hand-picked cases/blob-decode-*.json fixtures. */
+ * well-formed base64 here (the fuzzer's random-bytes category below), which
+ * keeps every generated case a positive one. Malformed base64 is no longer a
+ * divergence to avoid - both ports validate and reject identically now - but
+ * "expect a rejection" is a hand-written contract rather than something worth
+ * generating, so those live in cases/blob-decode-*-rejected.json alongside
+ * the sink: "real" parseEntry cases. See PARITY.md. */
 function addBlobDecode(name, base64) {
   const { blobId, bytes } = decodeImage(base64);
   add({ name, module: "blob", fn: "decodeImage", input: { base64 }, expect: { blobId, bytes: bytes.length } });

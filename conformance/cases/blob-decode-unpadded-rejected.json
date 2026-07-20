@@ -1,0 +1,8 @@
+{
+  "name": "blob-decode-unpadded-rejected",
+  "module": "blob",
+  "fn": "decodeImage",
+  "comment": "Regression: 'abc' is not a valid base64 length (3 chars, not a multiple of 4). Node's Buffer.from would leniently decode it to 2 bytes and Python's b64decode would raise, so before decodeImage/decode_image validated their input this single string produced an 'image' ContentPart in TS and an 'unknown' one in Python. Both ports now reject it. See jsonl-real-sink-unpadded-image-rejected for the parseEntry-level consequence.",
+  "input": { "base64": "abc" },
+  "expect": { "throws": true }
+}
