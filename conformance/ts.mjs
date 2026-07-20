@@ -13,6 +13,7 @@ import { hashImageBytes, decodeImage } from "../packages/core/src/blob.ts";
 import {
   readyForInput,
   hasInputPrompt,
+  pickerOwnsInput,
   hasStylePicker,
   classifyStartupFailure,
   isHardStartupFailure,
@@ -106,6 +107,8 @@ function run(kase) {
         return readyForInput(screenFromInput(input));
       case "hasInputPrompt":
         return hasInputPrompt(input.lines);
+      case "pickerOwnsInput":
+        return pickerOwnsInput(screenFromInput(input));
       case "classifyStartupFailure":
         return classifyStartupFailure(input.text);
       case "isHardStartupFailure":

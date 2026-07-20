@@ -1,0 +1,37 @@
+{
+  "name": "detect-picker-owns-input-state4-after-submitting-numbered-list",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Real captured state (screens.json, label 4-after-submitting-numbered-list). The submitted '❯ 1. Reply with only the word alpha' stays in scrollback forever; the live input row below it (where the cursor now sits) is back to bare. Getting this wrong is the catastrophic case the lines-only predicate produced: every later sendPrompt from a user who ever sent a numbered list would be refused, permanently.",
+  "input": {
+    "cursor": {
+      "row": 20,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "❯ 1. Reply with only the word alpha",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "❯ "
+    ]
+  },
+  "expect": false
+}

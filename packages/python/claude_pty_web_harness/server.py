@@ -58,7 +58,7 @@ from typing import Awaitable, Callable, Optional, Sequence, Union
 from fastapi import APIRouter, Depends, FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse, Response
 
-from .harness import ClaudeHarness
+from .harness import ClaudeHarness, PickerOpenError
 
 # Only a lowercase hex SHA-256 digest is ever a real blob_id (see
 # ClaudeHarness's blob store); reject anything else before it ever reaches
@@ -168,6 +168,10 @@ def create_router(
         try:
             await get_harness().send_prompt(session_id, body["text"])
             return {"ok": True}
+        except PickerOpenError as e:
+            # A picker on screen is a client-observable conflict (409);
+            # mirrors the TS route's picker_open -> 409 mapping.
+            return JSONResponse({"error": str(e)}, status_code=409)
         except KeyError:
             return JSONResponse({"error": "unknown session"}, status_code=404)
 
@@ -269,11 +273,26 @@ def create_router(
                     continue
                 t = data.get("type")
                 if t == "prompt":
-                    # Fire-and-forget, but consume the task's exception so a
-                    # failing send doesn't log an unretrieved-exception
-                    # traceback (mirrors the TS server's .catch(() => {})).
+                    # Fire-and-forget, but surface a failure to the socket
+                    # instead of swallowing it: an open picker (PickerOpenError)
+                    # is the case this guard exists for, but a session that
+                    # vanished mid-flight deserves the same treatment rather
+                    # than the caller believing its message was sent (mirrors
+                    # the TS server's .catch that sends a wire "error").
                     task = asyncio.create_task(harness.send_prompt(session_id, data.get("text", "")))
-                    task.add_done_callback(lambda done: done.cancelled() or done.exception())
+
+                    def _on_prompt_done(done: "asyncio.Task") -> None:
+                        if done.cancelled():
+                            return
+                        err = done.exception()
+                        if err is not None:
+                            # Route through the queue rather than sending here
+                            # directly: outbound() is the single writer on this
+                            # socket, and ws.send_json is not safe to call from
+                            # two places concurrently.
+                            queue.put_nowait({"type": "error", "message": str(err)})
+
+                    task.add_done_callback(_on_prompt_done)
                 elif t == "interrupt":
                     await harness.interrupt(session_id)
 

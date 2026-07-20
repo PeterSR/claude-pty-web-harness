@@ -1,0 +1,14 @@
+{
+  "name": "detect-picker-owns-input-cursor-absent",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "No cursor reported at all (cursor: null): readyForInput trivially abstains (as it does for the absent-cursor readyForInput case), and with no cursor row to exclude, the numbered menu row is picked up by condition 3.",
+  "input": {
+    "cursor": null,
+    "lines": [
+      "❯ 1. Yes, I trust this folder",
+      "  2. No"
+    ]
+  },
+  "expect": true
+}

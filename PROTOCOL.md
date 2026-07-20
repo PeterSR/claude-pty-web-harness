@@ -26,6 +26,22 @@ All JSON uses camelCase keys. The default route prefix is `/api` (configurable).
 Errors return a non-2xx status with `{ "error": string }`. `POST /api/sessions`
 returns 400 (missing `cwd`), 403 (`cwd` outside `allowedRoots`), or 500.
 
+`POST /api/sessions/:id/prompt` returns 404 for an unknown or already-gone
+session, and 409 when the screen shows an open numbered picker. An
+`AskUserQuestion` prompt, a tool-permission prompt, and the trust modal all
+render as the same "1. ..." rows, so the check behind the 409 only knows that
+some picker is open, never which one - sending the prompt as written would
+confirm whatever option is highlighted instead of submitting it, so the
+request is rejected before anything is written rather than let that happen
+silently. The guard depends on a screen capture: it only runs when the server
+is configured with `readiness: "screen"` (the default); a server started with
+`READINESS=delay` never captures a screen at all, so it never sees a picker
+either, and the prompt always sends the old unconditional way in that mode
+(see USAGE.md's Configuration section). Even in `"screen"` mode the guard only
+narrows the window in which a collision can happen, it does not close it: a
+picker that opens in the moment between the capture and the trailing Enter
+still gets confirmed.
+
 `GET /api/sessions/:id/blobs/:blobId` serves the bytes behind an `image`
 `ContentPart` (see below): decoded, never-base64 bytes from the harness's
 per-session blob store, keyed by the SHA-256 hex content hash embedded as
@@ -53,6 +69,16 @@ Server -> client (`ServerMessage`):
 { "type": "chat",   "event": ChatEvent }
 { "type": "error",  "message": string }
 ```
+
+An `error` message reports a failure that has no dedicated status/`ok` field to
+ride on over this transport: an unauthorized or unknown-session upgrade, a
+malformed `prompt` payload, or - the case this section exists to call out -
+any failed `sendPrompt`/`send_prompt`, including a rejected picker collision.
+The REST route can answer synchronously with 409 because it awaits the send;
+the WebSocket's `prompt` message is fire-and-forget, so a failed send - picker
+collision or otherwise - now surfaces afterward as this message instead of
+being silently swallowed, which is how every kind of send failure on this path
+used to behave.
 
 Client -> server (`ClientMessage`):
 

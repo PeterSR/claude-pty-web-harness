@@ -1,0 +1,150 @@
+[
+  {
+    "label": "1-idle-input-box",
+    "cursor": {
+      "row": 15,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      " ClauClaudeeCode v2.1.215 ─────────────────────────────────────────────────────────────────────────────────────────────╮",
+      "│                                                    │ Tips for getting started                                        │",
+      "│                 Welcome back Peter!                │ Run /init to create a CLAUDE.md file with instructions for Cla… │",
+      "│                                                    │ ─────────────────────────────────────────────────────────────── │",
+      "│                       ▐▛███▜▌                      │ What's new                                                      │",
+      "│                      ▝▜█████▛▘                     │ Claude no longer runs the `/verify` and `/code-review` skills … │",
+      "│                        ▘▘ ▝▝                       │ Fixed single-segment `dir/**` allow rules like `Edit(src/**)` … │",
+      "│     Sonnet 5 with xhigh effort · Claude Max ·      │ Fixed a permission-check bypass affecting commands run in Wind… │",
+      "│     peter@caterflow.dk's Organization              │ /release-notes for more                                         │",
+      "│ /…/97571164-9d25-47d8-a6ef-fa6adcad65f1/scratchpad │                                                                 │",
+      "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯",
+      " ⚠ 3 MCP servers need authentication · run /mcp                                                                         ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "❯                                                                                                                       ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "  🩸 2%/5h (4h50m) · 39%/wk ⚠100% in 2d12h (3d6h)                                                    ◉ xhigh · /effort  ",
+      "  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents                                                          "
+    ]
+  },
+  {
+    "label": "2-staged-numbered-text",
+    "cursor": {
+      "row": 15,
+      "col": 22,
+      "visible": true
+    },
+    "lines": [
+      " ClauClaudeeCode v2.1.215 ─────────────────────────────────────────────────────────────────────────────────────────────╮",
+      "│                                                    │ Tips for getting started                                        │",
+      "│                 Welcome back Peter!                │ Run /init to create a CLAUDE.md file with instructions for Cla… │",
+      "│                                                    │ ─────────────────────────────────────────────────────────────── │",
+      "│                       ▐▛███▜▌                      │ What's new                                                      │",
+      "│                      ▝▜█████▛▘                     │ Claude no longer runs the `/verify` and `/code-review` skills … │",
+      "│                        ▘▘ ▝▝                       │ Fixed single-segment `dir/**` allow rules like `Edit(src/**)` … │",
+      "│     Sonnet 5 with xhigh effort · Claude Max ·      │ Fixed a permission-check bypass affecting commands run in Wind… │",
+      "│     peter@caterflow.dk's Organization              │ /release-notes for more                                         │",
+      "│ /…/97571164-9d25-47d8-a6ef-fa6adcad65f1/scratchpad │                                                                 │",
+      "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯",
+      " ⚠ 3 MCP servers need authentication · run /mcp                                                                         ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "❯ 1. Fix the login bug                                                                                                  ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "  🩸 2%/5h (4h50m) · 39%/wk ⚠100% in 2d12h (3d6h)                                                    ◉ xhigh · /effort  ",
+      "  ⏵⏵ bypass permissions on (shift+tab to cycle)                                                                         "
+    ]
+  },
+  {
+    "label": "3-after-clear",
+    "cursor": {
+      "row": 15,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      " ClauClaudeeCode v2.1.215 ─────────────────────────────────────────────────────────────────────────────────────────────╮",
+      "│                                                    │ Tips for getting started                                        │",
+      "│                 Welcome back Peter!                │ Run /init to create a CLAUDE.md file with instructions for Cla… │",
+      "│                                                    │ ─────────────────────────────────────────────────────────────── │",
+      "│                       ▐▛███▜▌                      │ What's new                                                      │",
+      "│                      ▝▜█████▛▘                     │ Claude no longer runs the `/verify` and `/code-review` skills … │",
+      "│                        ▘▘ ▝▝                       │ Fixed single-segment `dir/**` allow rules like `Edit(src/**)` … │",
+      "│     Sonnet 5 with xhigh effort · Claude Max ·      │ Fixed a permission-check bypass affecting commands run in Wind… │",
+      "│     peter@caterflow.dk's Organization              │ /release-notes for more                                         │",
+      "│ /…/97571164-9d25-47d8-a6ef-fa6adcad65f1/scratchpad │                                                                 │",
+      "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯",
+      " ⚠ 3 MCP servers need authentication · run /mcp                                                                         ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "❯                                                                                                                       ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "  🩸 2%/5h (4h50m) · 39%/wk ⚠100% in 2d12h (3d6h)                                         Ctrl+Y to paste deleted text  ",
+      "  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents                                                          "
+    ]
+  },
+  {
+    "label": "4-after-submitting-numbered-list",
+    "cursor": {
+      "row": 20,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      " ClauClaudeeCode v2.1.215 ─────────────────────────────────────────────────────────────────────────────────────────────╮",
+      "│                                                    │ Tips for getting started                                        │",
+      "│                 Welcome back Peter!                │ Run /init to create a CLAUDE.md file with instructions for Cla… │",
+      "│                                                    │ ─────────────────────────────────────────────────────────────── │",
+      "│                       ▐▛███▜▌                      │ What's new                                                      │",
+      "│                      ▝▜█████▛▘                     │ Claude no longer runs the `/verify` and `/code-review` skills … │",
+      "│                        ▘▘ ▝▝                       │ Fixed single-segment `dir/**` allow rules like `Edit(src/**)` … │",
+      "│     Sonnet 5 with xhigh effort · Claude Max ·      │ Fixed a permission-check bypass affecting commands run in Wind… │",
+      "│     peter@caterflow.dk's Organization              │ /release-notes for more                                         │",
+      "│ /…/97571164-9d25-47d8-a6ef-fa6adcad65f1/scratchpad │                                                                 │",
+      "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯",
+      " ⚠ 3 MCP servers need authentication · run /mcp                                                                         ",
+      "❯ 1. Reply with only the word alpha                                                                                     ",
+      "  2. Do nothing else                                                                                                    ",
+      "● alpha                                                                                                                 ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "❯                                                                                                                       ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "  🩸e2%/5hi(4h50m) ·h39%/wk ⚠100% in 2d12h (3d6h)                                                                       ",
+      "  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents                                                          "
+    ]
+  },
+  {
+    "label": "5-askuserquestion-picker-open",
+    "cursor": {
+      "row": 25,
+      "col": 0,
+      "visible": false
+    },
+    "lines": [
+      " ClauClaudeeCode v2.1.215 ─────────────────────────────────────────────────────────────────────────────────────────────╮",
+      "│                                                    │ Tips for getting started                                        │",
+      "│                 Welcome back Peter!                │ Run /init to create a CLAUDE.md file with instructions for Cla… │",
+      "│                                                    │ ─────────────────────────────────────────────────────────────── │",
+      "│                       ▐▛███▜▌                      │ What's new                                                      │",
+      "│                      ▝▜█████▛▘                     │ Claude no longer runs the `/verify` and `/code-review` skills … │",
+      "│                        ▘▘ ▝▝                       │ Fixed single-segment `dir/**` allow rules like `Edit(src/**)` … │",
+      "│     Sonnet 5 with xhigh effort · Claude Max ·      │ Fixed a permission-check bypass affecting commands run in Wind… │",
+      "│     peter@caterflow.dk's Organization              │ /release-notes for more                                         │",
+      "│ /…/97571164-9d25-47d8-a6ef-fa6adcad65f1/scratchpad │                                                                 │",
+      "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯",
+      " ⚠ 3 MCP servers need authentication · run /mcp                                                                         ",
+      "❯ 1. Reply with only the word alpha                                                                                     ",
+      "  2. Do nothing else                                                                                                    ",
+      "● alpha                                                                                                                 ",
+      "❯ Use the AskUserQuestion tool right now to ask me whether I prefer red or blue. Ask only, do nothing else.             ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      " ☐ Color pref                                                                                                           ",
+      "Which color do you prefer?                                                                                              ",
+      "❯ 1. Red                                                                                                                ",
+      "     You prefer red                                                                                                     ",
+      "  2. Blue                                                                                                               ",
+      "     You prefer blue                                                                                                    ",
+      "  3. Type something.                                                                                                    ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "  4. Chat about this                                                                                                    ",
+      "Enter to select · ↑/↓ to navigate · Esc to cancel                                                                       "
+    ]
+  }
+]

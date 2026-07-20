@@ -1,0 +1,13 @@
+{
+  "name": "detect-picker-owns-input-fullwidth-digit",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Same historical-break family: a fullwidth digit must not be treated as ASCII '0'-'9', so this row is not reported as a numbered picker option in either language - cursor is absent, so if the digit check were wrong this would flip to true.",
+  "input": {
+    "cursor": null,
+    "lines": [
+      "❯ ２. Trust this folder"
+    ]
+  },
+  "expect": false
+}

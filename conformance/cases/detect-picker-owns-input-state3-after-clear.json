@@ -1,0 +1,32 @@
+{
+  "name": "detect-picker-owns-input-state3-after-clear",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Real captured state (screens.json, label 3-after-clear): back to an empty live input row after clearing staged text - same shape as state 1.",
+  "input": {
+    "cursor": {
+      "row": 15,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "❯ "
+    ]
+  },
+  "expect": false
+}

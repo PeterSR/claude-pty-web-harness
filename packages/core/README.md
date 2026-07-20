@@ -46,6 +46,17 @@ blobId)` (bytes + mediaType for an `image` `ContentPart`, or `undefined` -
 back the `GET /:id/blobs/:blobId` route with it; never inline the bytes into a
 `ChatEvent`).
 
+`sendPrompt` captures the screen once before writing anything (in
+`readiness: "screen"` mode only) and throws `PickerOpenError` (`code:
+"picker_open"`, exported from this package) if a numbered picker - an
+`AskUserQuestion` prompt, a tool-permission prompt, and the trust modal all
+render identically, so it cannot say which one - is open: the trailing Enter
+that submits a prompt would otherwise confirm whichever option is highlighted.
+It fails open on a capture timeout, and it still leaves a narrow race between
+the capture and the Enter, so treat it as reducing collisions, not eliminating
+them. A caller that already knows what is on screen can pass `{ force: true }`
+to skip the check; it is not available over the reference HTTP/WS server.
+
 See the [project README](https://github.com/PeterSR/claude-pty-web-harness#readme)
 and [USAGE.md](https://github.com/PeterSR/claude-pty-web-harness/blob/main/USAGE.md)
 for the full API and the permission-mode notes.

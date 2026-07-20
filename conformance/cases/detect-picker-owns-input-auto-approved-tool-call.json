@@ -1,0 +1,52 @@
+{
+  "name": "detect-picker-owns-input-auto-approved-tool-call",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Real captured state (picker-screens/screens2.json, label 7-tool-permission-prompt). NOTE the label is a misnomer kept for provenance: no tool-permission prompt was ever on screen. Two capture attempts failed to produce one, because the tool call was approved and had already run before the screen settled. So this case pins a resolved tool call with staged text below it, not a permission prompt. A real tool-permission prompt remains an UNVERIFIED state for this predicate; see conformance/picker-screens/README.md.",
+  "input": {
+    "cursor": {
+      "row": 35,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "❯ Run the shell command: echo hello",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "❯  Count numbers one to forty"
+    ]
+  },
+  "expect": false
+}

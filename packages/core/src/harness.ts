@@ -11,6 +11,7 @@ import { decodeImage } from "./blob.js";
 import {
   readyForInput,
   hasInputPrompt,
+  pickerOwnsInput,
   hasBypassWarning,
   hasTrustModal,
   hasStylePicker,
@@ -35,6 +36,12 @@ export const HARNESS_NAMESPACE = "claude-pty-web-harness";
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
 
+// sendPrompt's picker-guard capture: a short settle/timeout, not startup's
+// (300/1500), since this only ever needs to catch a picker that is already
+// sitting still on screen - see sendPrompt's doc comment for the argument.
+const PICKER_CHECK_SETTLE_MS = 150;
+const PICKER_CHECK_TIMEOUT_MS = 1000;
+
 /**
  * Thrown by createSession when the requested cwd resolves outside the configured
  * allowedRoots. Carries a stable `code` so a transport can map it to a 403
@@ -45,6 +52,22 @@ export class CwdNotAllowedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CwdNotAllowedError";
+  }
+}
+
+/**
+ * Thrown by sendPrompt when a picker owns the input (pickerOwnsInput) and
+ * `force` was not set: writing the trailing Enter would confirm whichever
+ * option is highlighted instead of submitting the prompt. Carries a stable
+ * `code` so a transport can map it to a 409 without depending on the message
+ * or an instanceof check across module bounds, the same pattern as
+ * CwdNotAllowedError above.
+ */
+export class PickerOpenError extends Error {
+  readonly code = "picker_open";
+  constructor(message: string) {
+    super(message);
+    this.name = "PickerOpenError";
   }
 }
 
@@ -384,10 +407,40 @@ export class ClaudeHarness extends EventEmitter {
    * Deliver a prompt as a bracketed paste so multi-line text lands in the TUI
    * input intact, then (by default) submit it with a single Enter. Pass
    * `{ submit: false }` to stage the text without sending.
+   *
+   * Before writing anything - the check runs before the paste, not just
+   * before the Enter, and applies even when `submit: false` - this checks
+   * whether a picker owns the input (pickerOwnsInput). If it does, the
+   * trailing Enter would confirm whichever option is highlighted rather than
+   * submit the prompt, so both the paste and the Enter are withheld and
+   * PickerOpenError is thrown instead. Pass `{ force: true }` to skip the
+   * check and restore the unconditional old behaviour.
+   *
+   * The check itself is one captureScreen call, and failing open when it
+   * returns null (a timeout or error) is deliberate, not a cop-out: a picker
+   * sitting open produces no output, so the screen settles - and is observed
+   * - almost immediately, while a screen that will not settle means claude is
+   * busy streaming, which means no picker is open. The only state this check
+   * cannot observe is the state that is already known to be safe.
+   *
+   * `readiness: "delay"` never captures a screen at all (capture wedges some
+   * setups), so this check is skipped entirely in that mode and today's
+   * unconditional-send behaviour is unchanged there.
    */
-  async sendPrompt(id: string, text: string, opts: { submit?: boolean } = {}): Promise<void> {
+  async sendPrompt(id: string, text: string, opts: { submit?: boolean; force?: boolean } = {}): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) throw new Error(`unknown session ${id}`);
+
+    if (!opts.force && this.readiness === "screen") {
+      const screen = await this.captureScreen(session.ptyId, PICKER_CHECK_SETTLE_MS, PICKER_CHECK_TIMEOUT_MS);
+      if (screen && screen.lines.length && pickerOwnsInput(screen)) {
+        throw new PickerOpenError(
+          `session ${id} is showing an interactive picker; sending a prompt now would confirm the ` +
+            `highlighted option instead. Answer or dismiss it first, or pass force to override.`,
+        );
+      }
+    }
+
     // Inside a paste the TUI treats CR as a literal newline, not a submit.
     const body = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\r");
     this.client.writePane(session.ptyId, `${PASTE_START}${body}${PASTE_END}`);

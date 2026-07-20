@@ -183,7 +183,9 @@ export async function registerHarnessRoutes(
       await harness.sendPrompt(id, body.text);
       return { ok: true };
     } catch (err) {
-      reply.code(404);
+      // A picker on screen is a client-observable conflict (409); everything
+      // else (an unknown/gone session id) keeps the prior 404.
+      reply.code((err as { code?: string }).code === "picker_open" ? 409 : 404);
       return { error: String((err as Error).message ?? err) };
     }
   });
@@ -260,7 +262,19 @@ export async function registerHarnessRoutes(
           );
           return;
         }
-        harness.sendPrompt(id, msg.text).catch(() => {});
+        // Surface every send failure to the socket rather than swallowing it:
+        // an open picker (PickerOpenError) is the case this guard exists for,
+        // but a session that vanished mid-flight deserves the same treatment
+        // rather than the caller believing its message was sent.
+        harness.sendPrompt(id, msg.text).catch((err: unknown) => {
+          if (socket.readyState !== socket.OPEN) return;
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              message: String((err as Error).message ?? err),
+            } satisfies ServerMessage),
+          );
+        });
       } else if (msg.type === "interrupt") {
         harness.interrupt(id);
       }

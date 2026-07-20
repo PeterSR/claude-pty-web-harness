@@ -89,7 +89,7 @@ const session = await harness.createSession({
   // command, permissionMode, extraArgs, cols, rows
 });
 
-await harness.sendPrompt(session.id, "first line\nsecond line"); // multi-line, one paste
+await harness.sendPrompt(session.id, "first line\nsecond line"); // multi-line, one paste; throws PickerOpenError if a picker is open (see below)
 harness.interrupt(session.id);     // Ctrl-C the current turn
 harness.list();                    // SessionSummary[]
 harness.get(session.id);           // SessionSummary | undefined
@@ -152,8 +152,10 @@ const { id } = await client.createSession("/repo", "sonnet");
 
 // In a component: owns the WebSocket, returns the live transcript.
 function Chat({ sessionId }: { sessionId: string }) {
-  const { events, status, connected, sendPrompt, interrupt, blobUrl } =
+  const { events, status, lastError, connected, sendPrompt, interrupt, blobUrl } =
     useHarnessSession(sessionId, { baseUrl: "" });
+  // lastError holds the most recent server-rejected sendPrompt (e.g. a
+  // picker-open 409), or null; it clears on the next sendPrompt that succeeds
   // render `events` (ChatEvent[]) however you like; an image ContentPart's
   // bytes live at blobUrl(part.blobId), e.g. <img src={blobUrl(part.blobId)} />
 }
@@ -200,7 +202,7 @@ async def main():
         model="sonnet",        # optional
         # command, permission_mode, extra_args, cols, rows
     )
-    await harness.send_prompt(session["id"], "first line\nsecond line")  # multi-line, one paste
+    await harness.send_prompt(session["id"], "first line\nsecond line")  # multi-line, one paste; raises PickerOpenError if a picker is open (see below)
     await harness.interrupt(session["id"])
     harness.list()                       # list[SessionSummary]
     harness.get(session["id"])           # SessionSummary | None
@@ -240,7 +242,8 @@ REST (prefix `/api`):
 - `POST   /api/sessions` `{ cwd, model? }` -> `SessionSummary`
 - `GET    /api/sessions/:id` -> `SessionSummary` (404 if unknown)
 - `DELETE /api/sessions/:id` -> `{ ok: true }`
-- `POST   /api/sessions/:id/prompt` `{ text }` -> `{ ok: true }`
+- `POST   /api/sessions/:id/prompt` `{ text }` -> `{ ok: true }` (404 unknown
+  session; 409 a numbered picker is open on screen - see PROTOCOL.md)
 - `GET    /api/sessions/:id/blobs/:blobId` -> raw image bytes (404 if unknown;
   `blobId` is the SHA-256 hex hash from an `image` `ContentPart`)
 
@@ -249,6 +252,9 @@ WebSocket `/api/sessions/:id/stream`:
 - On connect the server sends a `status` message, then replays the transcript as
   `chat` messages, then streams live.
 - Server -> client: `{ type: "status", status, error? }` | `{ type: "chat", event }` | `{ type: "error", message }`
+  (the `error` message now also covers any failed `prompt` send, e.g. a
+  picker-open rejection, instead of that failure being swallowed - see
+  PROTOCOL.md)
 - Client -> server: `{ type: "prompt", text }` | `{ type: "interrupt" }`
 
 `SessionSummary`: `{ id, ptyId, cwd, model, status, error?, createdAt }`.
@@ -409,11 +415,56 @@ alive so you can inspect or `kill()` it; it will not accept prompts.
 the TUI intact, then submits with one Enter. Pass `{ submit: false }` (TS) /
 `submit=False` (Python) to stage the text without sending.
 
+### sendPrompt and open pickers
+
+Before writing anything - the check runs before the paste, not just before the
+trailing Enter, so it also applies when staging text with `submit: false` /
+`submit=False`, since digits in pasted text can themselves select an option -
+`sendPrompt`/`send_prompt` captures the screen once and looks for an open
+numbered picker. An `AskUserQuestion` prompt, a tool-permission prompt, and the
+trust modal all render as the same "1. ..." rows, so the check only knows that
+some picker is open, never which one. If one is open, writing now would
+confirm whatever option is highlighted instead of delivering the prompt, so
+nothing is written and the call throws/raises `PickerOpenError` (`code`/class
+attribute `"picker_open"`, exported from both packages) instead.
+
+The capture uses a short settle (150ms) and timeout (1000ms), and it fails
+open - sends the prompt anyway - if that capture comes back empty. That is
+deliberate, not a shortcut: an open picker produces no output, so the screen
+settles (and gets observed) almost immediately, while a screen that will not
+settle means claude is mid-turn and busy streaming, which means no picker is
+open. The only screen state the check cannot observe is the one already known
+to be safe.
+
+This still leaves a narrow race: a picker can open in the window between the
+capture and the trailing Enter. The guard turns "confirms the picker every
+time one is open" into "a brief window", not into a proof, and it should be
+described that way.
+
+`readiness: "delay"` / `readiness="delay"` never captures a screen at all (see
+[Configuration](#configuration)), so this check is skipped entirely in that
+mode and prompts always send the old unconditional way there. That is a real
+behavioral difference between the two readiness modes, not just a startup
+detail.
+
+A caller that already knows what is on screen can pass `{ force: true }` (TS) /
+`force=True` (Python) to skip the check. It is a library-only escape hatch: the
+reference REST and WebSocket servers never expose it, since there is no
+legitimate reason for an HTTP caller to paste text into a picker.
+
+On the reference servers this surfaces as a 409 from `POST
+/api/sessions/:id/prompt`, or as a `{ type: "error", message }` WebSocket
+message on the `stream` endpoint's fire-and-forget `prompt` message (see
+[PROTOCOL.md](PROTOCOL.md)).
+
 ### Optimistic echo in the React hook
 
 `useHarnessSession` shows your prompt immediately as a local `user` event, then
 de-dupes it by text when the real JSONL `user` entry arrives. Harmless, but it is
-why a just-sent prompt can briefly exist twice in state.
+why a just-sent prompt can briefly exist twice in state. If the send instead
+fails (surfaced as `lastError`, e.g. a picker-open rejection), the hook drops
+that oldest matching local echo instead of waiting for a real entry that will
+never arrive, since the prompt was never actually delivered.
 
 ### Port 4318, not 4317
 
@@ -429,7 +480,7 @@ Environment variables (read by both reference servers):
 | `PORT` | server port (default 4318) |
 | `HOST` | bind host (default 127.0.0.1) |
 | `PUPPTYEER_SOCK` | daemon socket (else `$XDG_RUNTIME_DIR/pupptyeer/daemon.sock`) |
-| `READINESS` | `screen` (default, daemon-rendered) or `delay` (no capture; fallback) |
+| `READINESS` | `screen` (default, daemon-rendered; also gates `sendPrompt`'s picker guard, see "sendPrompt and open pickers" above) or `delay` (no capture; fallback; skips that guard too) |
 | `PUPPTYEER_PY_CLIENT` | (Python, dev only) dir of a pupptyeer Python client checkout to import instead of the installed package |
 | `BACKEND_URL` | (app/Vite) proxy target (default `http://127.0.0.1:4318`) |
 

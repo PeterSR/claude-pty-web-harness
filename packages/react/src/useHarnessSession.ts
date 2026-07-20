@@ -15,6 +15,8 @@ export interface HarnessSession {
   status: SessionStatus;
   /** Failure reason (a StartupFailure) when status is "failed", else null. */
   error: string | null;
+  /** Most recent server-reported error (e.g. a rejected prompt), or null; cleared on the next sendPrompt call and on session change. */
+  lastError: string | null;
   connected: boolean;
   sendPrompt: (text: string) => void;
   interrupt: () => void;
@@ -32,6 +34,7 @@ export function useHarnessSession(
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [status, setStatus] = useState<SessionStatus>("starting");
   const [error, setError] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -40,6 +43,7 @@ export function useHarnessSession(
     setEvents([]);
     setStatus("starting");
     setError(null);
+    setLastError(null);
 
     const ws = new WebSocket(client.streamUrl(sessionId));
     wsRef.current = ws;
@@ -58,6 +62,21 @@ export function useHarnessSession(
       if (msg.type === "status") {
         setStatus(msg.status);
         setError(msg.status === "failed" ? msg.error ?? "startup_timeout" : null);
+      } else if (msg.type === "error") {
+        setLastError(msg.message);
+        // The protocol carries no message id, so an error can't be correlated
+        // to the exact prompt that caused it. Heuristic: drop the oldest
+        // remaining optimistic local echo, since sends and their failures are
+        // FIFO and every error the server currently sends corresponds to a
+        // failed prompt (see the dedupe below, which picks the oldest match
+        // for the same reason).
+        setEvents((prev) => {
+          const idx = prev.findIndex((e) => e.id.startsWith("local-") && e.kind === "user");
+          if (idx < 0) return prev;
+          const next = prev.slice();
+          next.splice(idx, 1);
+          return next;
+        });
       } else if (msg.type === "chat") {
         if (seen.has(msg.event.id)) return;
         seen.add(msg.event.id);
@@ -97,6 +116,7 @@ export function useHarnessSession(
       if (!trimmed) return;
       // Optimistically show the user's prompt; the JSONL echo is de-duped by id.
       setEvents((prev) => [...prev, { id: `local-${Date.now()}`, kind: "user", text: trimmed }]);
+      setLastError(null);
       send({ type: "prompt", text: trimmed });
     },
     [send],
@@ -109,5 +129,5 @@ export function useHarnessSession(
     [client, sessionId],
   );
 
-  return { events, status, error, connected, sendPrompt, interrupt, blobUrl };
+  return { events, status, error, lastError, connected, sendPrompt, interrupt, blobUrl };
 }

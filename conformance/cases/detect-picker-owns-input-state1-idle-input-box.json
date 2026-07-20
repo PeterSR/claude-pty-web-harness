@@ -1,0 +1,32 @@
+{
+  "name": "detect-picker-owns-input-state1-idle-input-box",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Real captured state (see conformance/picker-screens/screens.json, label 1-idle-input-box), reconstructed with blank filler standing in for everything that never starts with the prompt glyph. Live, empty input box; cursor visible right on the bare prompt row, so the text box owns input.",
+  "input": {
+    "cursor": {
+      "row": 15,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "❯ "
+    ]
+  },
+  "expect": false
+}

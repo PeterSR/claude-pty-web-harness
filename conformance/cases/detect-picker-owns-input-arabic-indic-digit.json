@@ -1,0 +1,13 @@
+{
+  "name": "detect-picker-owns-input-arabic-indic-digit",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Same historical parity break as the readyForInput digit-family cases: an over-eager digit check (e.g. Python str.isdigit()) treats an Arabic-Indic digit as numeric and would wrongly count this row as a numbered menu option. The correct (ASCII-only) check in both languages does not, so no picker is reported open - cursor is absent, so if the digit check were wrong this would flip to true.",
+  "input": {
+    "cursor": null,
+    "lines": [
+      "❯ ٢. Trust this folder"
+    ]
+  },
+  "expect": false
+}

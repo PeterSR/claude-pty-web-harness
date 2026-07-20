@@ -27,13 +27,20 @@ const client = createHarnessClient(""); // or "http://localhost:4318"
 const { id } = await client.createSession("/repo", "sonnet");
 
 function Chat({ sessionId }: { sessionId: string }) {
-  const { events, status, error, connected, sendPrompt, interrupt, blobUrl } =
+  const { events, status, error, lastError, connected, sendPrompt, interrupt, blobUrl } =
     useHarnessSession(sessionId, { baseUrl: "" });
   // status "failed" -> `error` holds the reason (e.g. "auth_blocked")
+  // lastError holds the most recent server-rejected sendPrompt (e.g. a
+  // picker-open 409), or null; it clears on the next sendPrompt that succeeds
   // render `events` (ChatEvent[]) however you like; an event's optional
   // `parts` may include an `image` part - render it as <img src={blobUrl(part.blobId)} />
 }
 ```
+
+When a `sendPrompt` fails - most commonly a picker-open rejection - the hook
+surfaces the server's message as `lastError` and drops the oldest matching
+optimistic `local-` echo from `events`, since that prompt was never actually
+delivered.
 
 Types come from
 [`@petersr/claude-pty-web-harness-protocol`](https://www.npmjs.com/package/@petersr/claude-pty-web-harness-protocol).

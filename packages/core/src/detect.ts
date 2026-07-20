@@ -45,6 +45,55 @@ export function hasInputPrompt(lines: string[]): boolean {
 }
 
 /**
+ * True when a numbered picker, not the text input box, owns the keyboard:
+ * the trailing Enter that sendPrompt writes to submit a prompt would be
+ * consumed by the picker instead, confirming whichever option is
+ * highlighted. Takes the whole Screen, cursor included, the same way
+ * readyForInput does, rather than just lines - an earlier lines-only check
+ * treated any "❯ 1. ..." row as a picker, and real captured screens (see
+ * conformance/picker-screens/) showed that shape alone is not enough to
+ * tell a picker from ordinary text at the prompt.
+ *
+ * True only when ALL three of the following hold, each one closing a false
+ * positive the lines-only check produced against an actual captured state:
+ *
+ * 1. readyForInput(screen) is false. If the cursor is parked on the "❯"
+ *    input row, the text box owns input no matter what else is on screen.
+ * 2. hasInputPrompt(screen.lines) is false. A submitted numbered message
+ *    stays in scrollback with its own "❯ 1. ..." row forever, while the
+ *    live input row underneath it goes right back to being bare. Without
+ *    this check, anyone who ever sent a numbered list would have every
+ *    later sendPrompt refused, permanently, for as long as that row stayed
+ *    on screen: a scrollback echo of a submitted message is not a picker.
+ * 3. some row is a "❯"-prefixed row whose remainder looks like a numbered
+ *    menu option, and that row is NOT the one a visible cursor is sitting
+ *    on. Typing (but not yet submitting) a numbered message parks the
+ *    cursor on exactly this kind of row too, e.g. "❯ 1. Fix the login bug",
+ *    so excluding the cursor's row is what tells the caller's own staged
+ *    text apart from a real picker's preselected option. A real picker
+ *    hides the cursor entirely (cursor.visible is false), so it always
+ *    clears this condition; staged text never can, since the cursor sits
+ *    right on it.
+ *
+ * Known limits, carried over unchanged from the predicate this replaces:
+ * this cannot say WHICH picker is open (an AskUserQuestion prompt, a
+ * tool-permission prompt and the trust modal all render the same numbered
+ * rows), and it cannot see an unnumbered picker such as the first-run style
+ * picker (hasStylePicker), whose rows have no digit-dot remainder to match.
+ */
+export function pickerOwnsInput(screen: Screen): boolean {
+  if (readyForInput(screen) || hasInputPrompt(screen.lines)) return false;
+  const { cursor, lines } = screen;
+  const cursorRow = cursor && cursor.visible ? cursor.row : -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (i === cursorRow) continue;
+    const rem = promptRowRemainder(lines[i]);
+    if (rem !== null && looksLikeMenuOption(rem)) return true;
+  }
+  return false;
+}
+
+/**
  * If `line` begins with the "❯" prompt glyph, return whatever follows it
  * (trimmed); otherwise null for a non-prompt row.
  */

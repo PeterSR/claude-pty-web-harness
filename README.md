@@ -118,7 +118,18 @@ modes](#permission-modes)), and `extraArgs` if you want to drive something other
 than the default `claude --permission-mode bypassPermissions`.
 `sendPrompt` delivers the text as a bracketed paste so multi-line input lands in
 the TUI intact, then submits with one Enter (pass `{ submit: false }` to stage
-without sending).
+without sending). Before writing anything it captures the screen once and
+checks whether a numbered picker is open (an `AskUserQuestion` prompt, a
+tool-permission prompt, and the trust modal all render as the same "1. ..."
+rows, so the check only knows that some picker is open, never which one): the
+trailing Enter would otherwise confirm whichever option is highlighted instead
+of submitting the prompt, so it throws `PickerOpenError` (`code:
+"picker_open"`) and writes nothing. That check only runs in `readiness:
+"screen"` mode and only narrows the collision window, it does not close it -
+see [How the startup modals are handled](#how-the-startup-modals-are-handled)
+for the full story, including the deliberate fail-open and the residual race.
+A caller that already knows what's on screen can pass `{ force: true }` to
+skip the check; it is library-only and not exposed by the reference server.
 
 To embed the reference HTTP/WS API on your own Fastify app:
 `registerHarnessRoutes(app, harness, { prefix: "/api" })`. It accepts auth hooks
@@ -159,10 +170,14 @@ in the daemon, the Go analogue of `charmbracelet/x/vt`). Readiness mode is
 configurable:
 
 - `readiness: "screen"` (default): read the daemon's rendered grid and drive the
-  startup modals.
+  startup modals. `sendPrompt` reuses the same capture to guard against writing
+  into an open picker before every send (see above).
 - `readiness: "delay"` (set `READINESS=delay` on the server): never capture; mark
   ready after a short delay and rely on claude's remembered trust/permission
-  config. A fallback for daemons without working capture.
+  config. A fallback for daemons without working capture. Because it never
+  captures, `sendPrompt`'s picker guard is skipped too in this mode: prompts
+  always send unconditionally, the same as before the guard existed. This is a
+  real safety difference between the two modes, not just a startup detail.
 
 > A long-running daemon keeps its old code, so after upgrading pupptyeer restart
 > the daemon (`pupptyeer daemon restart`); otherwise `captureScreen` can return
@@ -174,7 +189,8 @@ configurable:
 - `POST   /api/sessions` `{ cwd, model? }` → session summary
 - `GET    /api/sessions` → list
 - `DELETE /api/sessions/:id` → kill
-- `POST   /api/sessions/:id/prompt` `{ text }` → type a prompt
+- `POST   /api/sessions/:id/prompt` `{ text }` → type a prompt (404 unknown
+  session; 409 a numbered picker is open on screen - see PROTOCOL.md)
 - `GET    /api/sessions/:id/blobs/:blobId` → raw bytes for an `image` `ContentPart`
 - `WS     /api/sessions/:id/stream` → replays transcript + status, then streams
   `{type:"chat",event}` / `{type:"status",status,error?}`; accepts

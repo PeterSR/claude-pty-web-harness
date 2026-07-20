@@ -17,6 +17,13 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 _PASTE_START = b"\x1b[200~"
 _PASTE_END = b"\x1b[201~"
 
+# send_prompt's picker-guard capture: a short settle/timeout, not
+# _drive_startup's (300/1500), since this only ever needs to catch a picker
+# that is already sitting still on screen - see send_prompt's docstring for
+# the argument.
+_PICKER_CHECK_SETTLE_MS = 150
+_PICKER_CHECK_TIMEOUT_MS = 1000
+
 
 def _normalize_root(path: str) -> str:
     return os.path.abspath(os.path.expanduser(path))
@@ -31,6 +38,19 @@ from .protocol import ChatEvent, SessionStatus, SessionSummary
 # other apps sharing the global daemon (TS and Python share this app, so they
 # share the namespace). See .agent-workspace/pupptyeer-namespaces-plan.md.
 HARNESS_NAMESPACE = "claude-pty-web-harness"
+
+
+class PickerOpenError(Exception):
+    """Raised by send_prompt when a picker owns the input
+    (detect.picker_owns_input) and force was not set: writing the trailing
+    Enter would confirm whichever option is highlighted instead of submitting
+    the prompt. Carries a stable `code` class attribute so a transport can map
+    it to a 409 without depending on the message or an isinstance check across
+    module bounds. _check_cwd raises the builtin PermissionError instead of a
+    custom class because a fitting builtin existed there; no builtin fits
+    here, so a dedicated class is used."""
+
+    code = "picker_open"
 
 # Listener(kind, session_id, payload): kind is "chat" (payload=ChatEvent) or
 # "status" (payload=SessionStatus).
@@ -350,13 +370,46 @@ class ClaudeHarness:
 
     # --- input ------------------------------------------------------------
 
-    async def send_prompt(self, session_id: str, text: str, submit: bool = True) -> None:
+    async def send_prompt(
+        self, session_id: str, text: str, submit: bool = True, force: bool = False
+    ) -> None:
         """Deliver a prompt as a bracketed paste so multi-line text lands in the
         TUI input intact, then (by default) submit it with a single Enter. Pass
-        submit=False to stage the text without sending."""
+        submit=False to stage the text without sending.
+
+        Before writing anything - the check runs before the paste, not just
+        before the Enter, and applies even when submit=False - this checks
+        whether a picker owns the input (detect.picker_owns_input). If it
+        does, the trailing Enter would confirm whichever option is
+        highlighted rather than submit the prompt, so both the paste and the
+        Enter are withheld and PickerOpenError is raised instead. Pass
+        force=True to skip the check and restore the unconditional old
+        behaviour.
+
+        The check itself is one _capture_screen call, and failing open when
+        it returns None (a timeout or error) is deliberate, not a cop-out: a
+        picker sitting open produces no output, so the screen settles - and
+        is observed - almost immediately, while a screen that will not settle
+        means claude is busy streaming, which means no picker is open. The
+        only state this check cannot observe is the state that is already
+        known to be safe.
+
+        readiness == "delay" never captures a screen at all (capture wedges
+        some setups), so this check is skipped entirely in that mode and
+        today's unconditional-send behaviour is unchanged there."""
         s = self._sessions.get(session_id)
         if not s:
             raise KeyError(session_id)
+
+        if not force and self._readiness == "screen":
+            screen = await self._capture_screen(s.pty_id, _PICKER_CHECK_SETTLE_MS, _PICKER_CHECK_TIMEOUT_MS)
+            if screen and screen.lines and detect.picker_owns_input(screen):
+                raise PickerOpenError(
+                    f"session {session_id} is showing an interactive picker; sending a prompt now would "
+                    "confirm the highlighted option instead. Answer or dismiss it first, or pass force to "
+                    "override."
+                )
+
         normalized = text.replace("\r\n", "\n").replace("\r", "\n")
         # Inside a paste the TUI treats CR as a literal newline, not a submit.
         paste = _PASTE_START + normalized.replace("\n", "\r").encode() + _PASTE_END

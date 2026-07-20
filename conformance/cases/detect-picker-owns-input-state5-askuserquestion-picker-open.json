@@ -1,0 +1,29 @@
+{
+  "name": "detect-picker-owns-input-state5-askuserquestion-picker-open",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Real captured state (screens.json, label 5-askuserquestion-picker-open): cursor.visible is false (a real picker hides the cursor entirely, no live input row to sit on at all), and the highlighted option renders as '❯ 1. Red'. cursor.row is irrelevant once visible is false, so the real capture's row (25) isn't reproduced against this trimmed fixture; row 0 is used instead. The still-present scrollback echo from the earlier numbered send doesn't change the answer either way.",
+  "input": {
+    "cursor": {
+      "row": 0,
+      "col": 0,
+      "visible": false
+    },
+    "lines": [
+      "❯ 1. Reply with only the word alpha",
+      "  2. Do nothing else",
+      "● alpha",
+      "❯ Use the AskUserQuestion tool right now to ask me whether I prefer red or blue. Ask only, do nothing else.",
+      " ☐ Color pref",
+      "Which color do you prefer?",
+      "❯ 1. Red",
+      "     You prefer red",
+      "  2. Blue",
+      "     You prefer blue",
+      "  3. Type something.",
+      "  4. Chat about this",
+      "Enter to select · ↑/↓ to navigate · Esc to cancel"
+    ]
+  },
+  "expect": true
+}

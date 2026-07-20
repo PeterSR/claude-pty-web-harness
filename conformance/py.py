@@ -16,6 +16,7 @@ from claude_pty_web_harness.detect import (
     has_input_prompt,
     has_style_picker,
     is_hard_startup_failure,
+    picker_owns_input,
     ready_for_input,
 )
 from claude_pty_web_harness.jsonl import parse_entry
@@ -89,6 +90,8 @@ def run(kase):
             return ready_for_input(screen_from_input(inp))
         if fn == "hasInputPrompt":
             return has_input_prompt(inp["lines"])
+        if fn == "pickerOwnsInput":
+            return picker_owns_input(screen_from_input(inp))
         if fn == "classifyStartupFailure":
             return classify_startup_failure(inp["text"])
         if fn == "isHardStartupFailure":

@@ -44,6 +44,58 @@ def has_input_prompt(lines: List[str]) -> bool:
     return False
 
 
+def picker_owns_input(screen: Screen) -> bool:
+    """True when a numbered picker, not the text input box, owns the
+    keyboard: the trailing Enter that send_prompt writes to submit a prompt
+    would be consumed by the picker instead, confirming whichever option is
+    highlighted. Takes the whole Screen, cursor included, the same way
+    ready_for_input does, rather than just lines - an earlier lines-only
+    check treated any "<prompt> 1. ..." row as a picker, and real captured
+    screens (see conformance/picker-screens/) showed that shape alone is
+    not enough to tell a picker from ordinary text at the prompt.
+
+    True only when ALL three of the following hold, each one closing a false
+    positive the lines-only check produced against an actual captured state:
+
+    1. ready_for_input(screen) is False. If the cursor is parked on the
+       "<prompt>" input row, the text box owns input no matter what else is
+       on screen.
+    2. has_input_prompt(screen.lines) is False. A submitted numbered message
+       stays in scrollback with its own "<prompt> 1. ..." row forever, while
+       the live input row underneath it goes right back to being bare.
+       Without this check, anyone who ever sent a numbered list would have
+       every later send_prompt refused, permanently, for as long as that row
+       stayed on screen: a scrollback echo of a submitted message is not a
+       picker.
+    3. some row is a "<prompt>"-prefixed row whose remainder looks like a
+       numbered menu option, and that row is NOT the one a visible cursor is
+       sitting on. Typing (but not yet submitting) a numbered message parks
+       the cursor on exactly this kind of row too, e.g. "<prompt> 1. Fix the
+       login bug", so excluding the cursor's row is what tells the caller's
+       own staged text apart from a real picker's preselected option. A real
+       picker hides the cursor entirely (cursor.visible is False), so it
+       always clears this condition; staged text never can, since the
+       cursor sits right on it.
+
+    Known limits, carried over unchanged from the predicate this replaces:
+    this cannot say WHICH picker is open (an AskUserQuestion prompt, a
+    tool-permission prompt and the trust modal all render the same numbered
+    rows), and it cannot see an unnumbered picker such as the first-run
+    style picker (has_style_picker), whose rows have no digit-dot remainder
+    to match."""
+    if ready_for_input(screen) or has_input_prompt(screen.lines):
+        return False
+    cur = screen.cursor
+    cursor_row = cur.row if (cur is not None and cur.visible) else -1
+    for i, line in enumerate(screen.lines):
+        if i == cursor_row:
+            continue
+        rem = _prompt_row_remainder(line)
+        if rem is not None and _looks_like_menu_option(rem):
+            return True
+    return False
+
+
 def _prompt_row_remainder(line: str) -> Optional[str]:
     """If `line` begins with the "<prompt>" glyph, return what follows it
     (stripped); otherwise None for a non-prompt row."""

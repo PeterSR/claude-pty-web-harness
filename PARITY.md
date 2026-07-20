@@ -45,6 +45,7 @@ Covered by the conformance corpus (module `"detect"`), including the historical 
 |---|---|
 | `readyForInput(screen)` | `ready_for_input(screen)` |
 | `hasInputPrompt(lines)` | `has_input_prompt(lines)` |
+| `pickerOwnsInput(screen)` (new) | `picker_owns_input(screen)` |
 | `hasBypassWarning(text)` | `has_bypass_warning(text)` |
 | `hasTrustModal(text)` | `has_trust_modal(text)` |
 | `hasStylePicker(text)` | `has_style_picker(text)` |
@@ -87,11 +88,12 @@ it actually surfaced, by the `sink: "real"` cases `jsonl-real-sink-valid-image` 
 | get one session | `get(id)` | `get(session_id)` |
 | full transcript (for WS replay) | `transcript(id)` | `transcript(session_id)` |
 | image blob lookup (new) | `blob(sessionId, blobId): ImageBlob \| undefined` (`{bytes: Buffer, mediaType: string}`) | `blob(session_id, blob_id) -> Optional[Tuple[bytes, str]]` (`(data, media_type)`) - tuple vs. named object is idiomatic, not a wire shape |
-| send a prompt | `sendPrompt(id, text, opts?)` | `send_prompt(session_id, text, submit=True)` |
+| send a prompt, refusing an open picker (new) | `sendPrompt(id, text, opts?)` - `opts.force` bypasses the guard | `send_prompt(session_id, text, submit=True, force=False)` |
 | interrupt (Ctrl-C) | `interrupt(id)` | `interrupt(session_id)` |
 | kill a session | `kill(id)` (frees `session.blobs` as part of dropping the session) | `kill(session_id)` (frees `s.blobs` as part of popping the session) |
 | chat/status events | `EventEmitter`: `"chat"`, `"status"` | `add_listener(fn)`: `fn(kind, session_id, payload)`, kind `"chat"` \| `"status"` |
 | cwd allowlist rejection | throws `CwdNotAllowedError` (`code: "cwd_not_allowed"`) | raises `PermissionError` |
+| picker-open rejection (new) | throws `PickerOpenError` (`code: "picker_open"`) | raises `PickerOpenError` (`code = "picker_open"` class attribute) |
 
 The per-session image blob store (new) is an implementation detail behind `blob()`/`kill()` above,
 not a separate capability row: both languages key it by the SHA-256 hex blobId, store decoded
@@ -118,6 +120,14 @@ The blob route's security rules apply identically in both languages: `blobId` va
 `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`, a single generic 404 for both an
 unknown session and an unknown blob (never distinguishing which), and
 `Cache-Control: public, max-age=31536000, immutable`.
+
+`POST {prefix}/sessions/:id/prompt` maps a `PickerOpenError`/`PickerOpenError`
+(the picker-open guard, see the Harness section above) to 409 identically in
+both languages; any other send failure (an unknown or already-gone session id)
+keeps the prior 404. The WebSocket `stream` route's `prompt` message used to
+swallow a failed `sendPrompt`/`send_prompt` silently in both languages; both
+now surface it as a `{ type: "error", message }` frame instead, for a picker
+collision and for any other send failure alike.
 
 `authenticateBlob` / `authenticate_blob` exists because a browser `<img src>` can't send an
 `Authorization` header, the same constraint documented for `authenticateWs`/`authenticate_ws`: a

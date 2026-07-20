@@ -1,0 +1,50 @@
+{
+  "name": "detect-picker-owns-input-state6-mid-turn-busy",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Real captured state (see conformance/picker-screens/screens2.json, label 6-mid-turn-busy, which kept the raw unfiltered grid so this fixture's indices need no reconstruction). The live empty input row is present, cursor visible on it, while claude works; queuing a follow-up mid-turn is legitimate and must not be refused.",
+  "input": {
+    "cursor": {
+      "row": 33,
+      "col": 2,
+      "visible": true
+    },
+    "lines": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "❯ "
+    ]
+  },
+  "expect": false
+}

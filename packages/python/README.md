@@ -60,6 +60,17 @@ await harness.send_prompt(summary["id"], "first line\nsecond line")  # multi-lin
 `send_prompt` delivers the text as a bracketed paste so multi-line input lands in
 the TUI intact, then submits with one Enter (pass `submit=False` to stage it).
 
+`send_prompt` captures the screen once before writing anything (in
+`readiness="screen"` mode only) and raises `PickerOpenError` (`code =
+"picker_open"`, exported from this package) if a numbered picker - an
+`AskUserQuestion` prompt, a tool-permission prompt, and the trust modal all
+render identically, so it cannot say which one - is open: the trailing Enter
+that submits a prompt would otherwise confirm whichever option is highlighted.
+It fails open on a capture timeout, and it still leaves a narrow race between
+the capture and the Enter, so treat it as reducing collisions, not eliminating
+them. A caller that already knows what is on screen can pass `force=True` to
+skip the check; it is not available over the reference HTTP/WS server.
+
 ### Permission modes (read this before exposing it)
 
 Sessions default to `--permission-mode bypassPermissions`, which approves every

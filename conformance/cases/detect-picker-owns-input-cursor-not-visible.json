@@ -1,0 +1,18 @@
+{
+  "name": "detect-picker-owns-input-cursor-not-visible",
+  "module": "detect",
+  "fn": "pickerOwnsInput",
+  "comment": "Cursor object present but visible: false, mirroring the real AskUserQuestion capture (state 5) rather than an absent cursor. Same result as the absent-cursor case: no row is excluded, so the numbered menu row is picked up by condition 3.",
+  "input": {
+    "cursor": {
+      "row": 0,
+      "col": 0,
+      "visible": false
+    },
+    "lines": [
+      "❯ 1. Red",
+      "  2. Blue"
+    ]
+  },
+  "expect": true
+}
