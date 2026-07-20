@@ -1,0 +1,10 @@
+{
+  "name": "detect-ready-for-input-not-visible-cursor",
+  "module": "detect",
+  "fn": "readyForInput",
+  "input": {
+    "cursor": { "row": 0, "col": 2, "visible": false },
+    "lines": ["❯ Try \"x\""]
+  },
+  "expect": false
+}

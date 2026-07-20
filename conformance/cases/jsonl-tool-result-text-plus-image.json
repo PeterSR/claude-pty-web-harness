@@ -1,0 +1,44 @@
+{
+  "name": "jsonl-tool-result-text-plus-image",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u1",
+      "timestamp": "t1",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "is_error": false,
+            "content": [
+              { "type": "text", "text": "here is the result" },
+              {
+                "type": "image",
+                "source": { "type": "base64", "media_type": "image/png", "data": "aGVsbG8gd29ybGQ=" }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "lineNo": 1
+  },
+  "expect": [
+    {
+      "id": "u1:tr:0",
+      "ts": "t1",
+      "kind": "tool_result",
+      "toolUseId": "tu1",
+      "text": "here is the result",
+      "isError": false,
+      "parts": [
+        { "type": "text", "text": "here is the result" },
+        { "type": "image", "blobId": "stub-blob-id", "mediaType": "image/png", "bytes": 11 }
+      ]
+    }
+  ]
+}

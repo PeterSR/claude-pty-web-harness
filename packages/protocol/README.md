@@ -19,6 +19,7 @@ Requires Node >= 20. Types-only, so it adds nothing to your runtime bundle.
 ```ts
 import type {
   ChatEvent,
+  ContentPart,
   SessionStatus,
   SessionSummary,
   ServerMessage,
@@ -27,7 +28,17 @@ import type {
 ```
 
 - `ChatEvent` is a discriminated union on `kind`: `user`, `assistant_text`,
-  `thinking`, `tool_use`, `tool_result`, `system`, `result`.
+  `thinking`, `tool_use`, `tool_result`, `system`, `result`. The `user`,
+  `assistant_text`, and `tool_result` variants carry an optional `parts`: a
+  `ContentPart[]`, the lossless ordered breakdown of that message/tool
+  result's content blocks (text, image, or an `unknown` block this library
+  doesn't recognize). It's additive - `text` stays exactly as it always was, a
+  flattened text-only summary - and only present when there's something beyond
+  plain text to say.
+- `ContentPart` is a discriminated union on `type`: `text` (`{text}`), `image`
+  (`{blobId, mediaType, bytes}` - fetch the bytes from the server's blob
+  route), and `unknown` (`{blockType}`, so an unrecognized content-block type
+  surfaces visibly instead of silently vanishing).
 - `SessionStatus` is `"starting" | "ready" | "exited" | "failed"`; a `"failed"`
   session carries a `StartupFailure` reason in `SessionSummary.error`.
 - `ServerMessage` / `ClientMessage` are the WebSocket frames in each direction.

@@ -1,0 +1,8 @@
+{
+  "name": "blob-hash-hello-world",
+  "module": "blob",
+  "fn": "hashImageBytes",
+  "comment": "Highest-value case in the corpus: blobIds are the SHA-256 hex of decoded image bytes, so pinning an exact expected digest proves TS and Python hash the same bytes the same way. If this ever diverges, identical images would dedupe under different ids per language and the blob route's Cache-Control:immutable guarantee would be unsound.",
+  "input": { "base64": "aGVsbG8gd29ybGQ=" },
+  "expect": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+}

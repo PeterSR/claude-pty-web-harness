@@ -27,13 +27,24 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import re
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Optional, Sequence, Union
 
 from fastapi import APIRouter, Depends, FastAPI, Request, WebSocket
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from .harness import ClaudeHarness
+
+# Only a lowercase hex SHA-256 digest is ever a real blob_id (see
+# ClaudeHarness's blob store); reject anything else before it ever reaches
+# harness.blob(), since this content comes from MCP tool output and is not
+# fully trusted.
+_BLOB_ID_RE = re.compile(r"^[a-f0-9]{64}$")
+# Anything outside this allowlist is served as application/octet-stream rather
+# than trusting the media_type a tool reported, so a browser is never handed a
+# Content-Type it might sniff into executing.
+_BLOB_CONTENT_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 
 # Either a live harness or a zero-arg callable that returns one (lets the
 # standalone app defer creation to startup while still using create_router).
@@ -123,6 +134,30 @@ def create_router(
             return {"ok": True}
         except KeyError:
             return JSONResponse({"error": "unknown session"}, status_code=404)
+
+    @router.get(f"{prefix}/sessions/{{session_id}}/blobs/{{blob_id}}", dependencies=dep)
+    async def get_blob(session_id: str, blob_id: str):
+        # Unknown session and unknown blob (and a malformed blob_id) all 404
+        # with the same body, so a caller can't use the response to probe
+        # which of the two didn't exist.
+        if not _BLOB_ID_RE.match(blob_id):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        found = get_harness().blob(session_id, blob_id)
+        if not found:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        data, media_type = found
+        content_type = media_type if media_type in _BLOB_CONTENT_TYPES else "application/octet-stream"
+        return Response(
+            content=data,
+            media_type=content_type,
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+                # Content-addressed and immutable: blob_id is a hash of the
+                # bytes, so this response can never go stale.
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
+        )
 
     @router.websocket(f"{prefix}/sessions/{{session_id}}/stream")
     async def stream(ws: WebSocket, session_id: str):

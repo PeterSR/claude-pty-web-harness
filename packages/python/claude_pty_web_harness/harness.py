@@ -5,11 +5,12 @@ request/reply calls run in a thread executor so they never block the loop."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Bracketed-paste markers. Wrapping prompt text in these makes the TUI insert it
 # literally (newlines and all) instead of submitting at the first newline, the
@@ -23,6 +24,7 @@ def _normalize_root(path: str) -> str:
 
 from . import detect
 from ._pupptyeer import PupptyeerClient, Screen
+from .blob import hash_image_bytes
 from .jsonl import JsonlTailer
 from .protocol import ChatEvent, SessionStatus, SessionSummary
 
@@ -37,6 +39,14 @@ Listener = Callable[[str, str, Any], None]
 
 
 @dataclass
+class _Blob:
+    """One stored image blob: decoded bytes (never base64) plus its media
+    type."""
+    data: bytes
+    media_type: str
+
+
+@dataclass
 class _Session:
     id: str
     pty_id: str
@@ -48,6 +58,11 @@ class _Session:
     events: List[ChatEvent] = field(default_factory=list)
     ready: bool = False
     tasks: List[asyncio.Task] = field(default_factory=list)
+    # Per-session image store, keyed by the content-hash blobId embedded in
+    # ChatEvent image parts. Populated by the ImageSink handed to the tailer
+    # as JSONL is parsed, so a ChatEvent never carries raw bytes; freed with
+    # the rest of the session on kill() since it's just a field on this object.
+    blobs: Dict[str, _Blob] = field(default_factory=dict)
 
 
 class ClaudeHarness:
@@ -124,6 +139,16 @@ class ClaudeHarness:
         s = self._sessions.get(session_id)
         return s.events if s else []
 
+    def blob(self, session_id: str, blob_id: str) -> Optional[Tuple[bytes, str]]:
+        """(data, media_type) for a stored image blob, or None if the session
+        or the blob_id is unknown. The caller (the server's blob route) is
+        responsible for validating blob_id's shape before ever reaching here."""
+        s = self._sessions.get(session_id)
+        if not s:
+            return None
+        b = s.blobs.get(blob_id)
+        return (b.data, b.media_type) if b else None
+
     def _summary(self, s: _Session) -> SessionSummary:
         summary: SessionSummary = {
             "id": s.id,
@@ -174,7 +199,19 @@ class ClaudeHarness:
         )
         self._sessions[session_id] = s
 
-        tailer = JsonlTailer(session_id, on_event=lambda ev: self._on_chat(session_id, ev))
+        def on_image(data: str, media_type: str) -> str:
+            # Decode, hash, and stash the bytes as the JSONL is parsed, so a
+            # ChatEvent handed to a subscriber (or replayed on reconnect)
+            # never carries raw base64 - only the {blobId, mediaType, bytes}
+            # the protocol allows. Same hash in -> same blob_id out, so
+            # identical images (even across tool calls) dedupe to one entry.
+            raw = base64.b64decode(data, validate=False)
+            blob_id = hash_image_bytes(raw)
+            if blob_id not in s.blobs:
+                s.blobs[blob_id] = _Blob(raw, media_type)
+            return blob_id
+
+        tailer = JsonlTailer(session_id, on_event=lambda ev: self._on_chat(session_id, ev), on_image=on_image)
         s.tasks.append(asyncio.create_task(tailer.run()))
         s.tasks.append(asyncio.create_task(self._drive_startup(s)))
         return self._summary(s)
@@ -348,3 +385,5 @@ class ClaudeHarness:
             pass
         s.status = "exited"
         self._emit("status", session_id, "exited")
+        # No separate blob cleanup needed: s.blobs is just a field on the
+        # _Session object already popped above, so it's freed with it.

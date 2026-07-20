@@ -9,6 +9,12 @@ export interface HarnessClient {
   sendPrompt(id: string, text: string): Promise<void>;
   /** ws(s):// URL for the live transcript stream. */
   streamUrl(id: string): string;
+  /**
+   * URL for an image ContentPart's bytes (an <img src>). Unlike streamUrl this
+   * never needs to be absolute - a relative path works fine as an <img> src -
+   * so it stays usable with the default same-origin baseUrl ("").
+   */
+  blobUrl(id: string, blobId: string): string;
 }
 
 /**
@@ -65,5 +71,6 @@ export function createHarnessClient(baseUrl = ""): HarnessClient {
       const wsBase = origin.replace(/^http/, "ws");
       return `${wsBase}/api/sessions/${id}/stream`;
     },
+    blobUrl: (id, blobId) => url(`/api/sessions/${id}/blobs/${blobId}`),
   };
 }

@@ -1,0 +1,10 @@
+{
+  "name": "detect-ready-for-input-absent-cursor",
+  "module": "detect",
+  "fn": "readyForInput",
+  "input": {
+    "cursor": null,
+    "lines": ["❯ "]
+  },
+  "expect": false
+}

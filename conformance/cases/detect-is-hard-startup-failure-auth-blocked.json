@@ -1,0 +1,7 @@
+{
+  "name": "detect-is-hard-startup-failure-auth-blocked",
+  "module": "detect",
+  "fn": "isHardStartupFailure",
+  "input": { "failure": "auth_blocked" },
+  "expect": true
+}

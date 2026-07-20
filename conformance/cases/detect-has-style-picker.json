@@ -1,0 +1,7 @@
+{
+  "name": "detect-has-style-picker",
+  "module": "detect",
+  "fn": "hasStylePicker",
+  "input": { "text": "choose the text style\n❯ dark mode\n  light mode" },
+  "expect": true
+}

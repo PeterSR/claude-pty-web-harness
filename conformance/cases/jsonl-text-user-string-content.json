@@ -1,0 +1,12 @@
+{
+  "name": "jsonl-text-user-string-content",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": { "type": "user", "uuid": "u1", "timestamp": "t1", "message": { "role": "user", "content": "hi there" } },
+    "lineNo": 1
+  },
+  "expect": [
+    { "id": "u1", "ts": "t1", "kind": "user", "text": "hi there" }
+  ]
+}

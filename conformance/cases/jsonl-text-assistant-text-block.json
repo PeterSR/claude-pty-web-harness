@@ -1,0 +1,17 @@
+{
+  "name": "jsonl-text-assistant-text-block",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "assistant",
+      "uuid": "a1",
+      "timestamp": "t3",
+      "message": { "role": "assistant", "content": [{ "type": "text", "text": "reply" }] }
+    },
+    "lineNo": 3
+  },
+  "expect": [
+    { "id": "a1:a:0", "ts": "t3", "kind": "assistant_text", "text": "reply" }
+  ]
+}

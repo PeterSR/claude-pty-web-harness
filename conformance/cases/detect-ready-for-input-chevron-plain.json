@@ -1,0 +1,10 @@
+{
+  "name": "detect-ready-for-input-chevron-plain",
+  "module": "detect",
+  "fn": "readyForInput",
+  "input": {
+    "cursor": { "row": 0, "col": 2, "visible": true },
+    "lines": ["❯ "]
+  },
+  "expect": true
+}

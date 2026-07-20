@@ -1,6 +1,6 @@
 [project]
 name = "claude-pty-web-harness"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python backend parity for claude-pty-web-harness: drive Claude Code in a pupptyeer pty and stream its JSONL transcript over the same HTTP/WS protocol as the TS server."
 readme = "README.md"
 requires-python = ">=3.10"

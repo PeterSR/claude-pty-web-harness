@@ -94,6 +94,7 @@ harness.interrupt(session.id);     // Ctrl-C the current turn
 harness.list();                    // SessionSummary[]
 harness.get(session.id);           // SessionSummary | undefined
 harness.transcript(session.id);    // ChatEvent[] captured so far
+harness.blob(session.id, blobId);  // { bytes, mediaType } | undefined, for an image ContentPart
 await harness.kill(session.id);
 ```
 
@@ -137,14 +138,20 @@ const { id } = await client.createSession("/repo", "sonnet");
 
 // In a component: owns the WebSocket, returns the live transcript.
 function Chat({ sessionId }: { sessionId: string }) {
-  const { events, status, connected, sendPrompt, interrupt } =
+  const { events, status, connected, sendPrompt, interrupt, blobUrl } =
     useHarnessSession(sessionId, { baseUrl: "" });
-  // render `events` (ChatEvent[]) however you like
+  // render `events` (ChatEvent[]) however you like; an image ContentPart's
+  // bytes live at blobUrl(part.blobId), e.g. <img src={blobUrl(part.blobId)} />
 }
 ```
 
 `ChatEvent` is a discriminated union on `kind`: `user`, `assistant_text`,
-`thinking`, `tool_use`, `tool_result`, `result`.
+`thinking`, `tool_use`, `tool_result`, `result`. The `user`, `assistant_text`,
+and `tool_result` variants also carry an optional `parts` (a `ContentPart[]`):
+the lossless ordered breakdown of that message/tool result's content blocks
+(text, image, or `unknown` for a block type this library doesn't recognize).
+It's additive - `text` is unchanged, a flattened text-only summary - and only
+present when there's something beyond plain text.
 
 ## Python
 
@@ -184,6 +191,7 @@ async def main():
     harness.list()                       # list[SessionSummary]
     harness.get(session["id"])           # SessionSummary | None
     harness.transcript(session["id"])    # list[ChatEvent]
+    harness.blob(session["id"], blob_id) # (bytes, media_type) | None, for an image ContentPart
     await harness.kill(session["id"])
 
 asyncio.run(main())
@@ -216,6 +224,8 @@ REST (prefix `/api`):
 - `GET    /api/sessions/:id` -> `SessionSummary` (404 if unknown)
 - `DELETE /api/sessions/:id` -> `{ ok: true }`
 - `POST   /api/sessions/:id/prompt` `{ text }` -> `{ ok: true }`
+- `GET    /api/sessions/:id/blobs/:blobId` -> raw image bytes (404 if unknown;
+  `blobId` is the SHA-256 hex hash from an `image` `ContentPart`)
 
 WebSocket `/api/sessions/:id/stream`:
 
@@ -233,13 +243,31 @@ never reached the input prompt; `error` then holds a machine reason (a
 `ChatEvent` (discriminated by `kind`, all carry `id` and optional `ts`):
 
 ```
-user           { kind:"user", text }
-assistant_text { kind:"assistant_text", text }
+user           { kind:"user", text, parts? }
+assistant_text { kind:"assistant_text", text, parts? }
 thinking       { kind:"thinking", text }
 tool_use       { kind:"tool_use", name, toolUseId, input }
-tool_result    { kind:"tool_result", toolUseId, text, isError }
+tool_result    { kind:"tool_result", toolUseId, text, isError, parts? }
 result         { kind:"result", subtype?, durationMs?, costUsd?, text? }
 ```
+
+`parts` (a `ContentPart[]`) is optional and additive: present only when a
+message/tool result has something beyond plain text, so `text` stays exactly
+what it always was (a flattened text-only summary) and old consumers see no
+change.
+
+```
+text    { type:"text", text }
+image   { type:"image", blobId, mediaType, bytes }
+unknown { type:"unknown", blockType }
+```
+
+An `image` part's bytes live at `GET /api/sessions/:id/blobs/:blobId`
+(`blobId` is the SHA-256 hex hash of the decoded bytes); they never travel
+inside the `ChatEvent` itself, since the harness holds the full transcript in
+memory and replays it on every WebSocket reconnect. `unknown` is a content
+block this library doesn't recognize (e.g. a future Anthropic block type);
+`blockType` names it, so it surfaces instead of silently vanishing.
 
 Chat is built from the JSONL Claude persists (we generate the `--session-id`);
 the pty is used for input and for driving the startup modals.

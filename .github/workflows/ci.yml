@@ -37,7 +37,26 @@ jobs:
       - name: Import check
         working-directory: packages/python
         run: |
-          python -c "import claude_pty_web_harness; from claude_pty_web_harness import server, harness, jsonl, detect, protocol; print('imports OK')"
+          python -c "import claude_pty_web_harness; from claude_pty_web_harness import server, harness, jsonl, detect, protocol, blob; print('imports OK')"
       - name: Tests
         working-directory: packages/python
         run: pytest -q
+
+  conformance:
+    name: Cross-language conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install TS workspaces (for tsx, used to run the TS runner against source)
+        run: npm install --no-audit --no-fund
+      - name: Install Python package
+        working-directory: packages/python
+        run: pip install -e .
+      - name: Run the shared golden corpus against both languages
+        run: bash conformance/run.sh

@@ -1,0 +1,11 @@
+{
+  "name": "detect-ready-for-input-numbered-menu-arabic-indic-digit",
+  "module": "detect",
+  "fn": "readyForInput",
+  "comment": "Historical parity break: an over-eager digit check (e.g. Python str.isdigit()) treats an Arabic-Indic digit as numeric, so it would misclassify this row as a numbered menu option and report not-ready. The correct (ASCII-only) check in both languages does not, so the cursor on this row IS the main input prompt.",
+  "input": {
+    "cursor": { "row": 0, "col": 2, "visible": true },
+    "lines": ["❯ ٢. Trust this folder"]
+  },
+  "expect": true
+}

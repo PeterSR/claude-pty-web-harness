@@ -1,0 +1,28 @@
+{
+  "name": "jsonl-user-image-block",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u2",
+      "timestamp": "t2",
+      "message": {
+        "role": "user",
+        "content": [
+          { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": "aGVsbG8=" } }
+        ]
+      }
+    },
+    "lineNo": 2
+  },
+  "expect": [
+    {
+      "id": "u2:x:0",
+      "ts": "t2",
+      "kind": "user",
+      "text": "",
+      "parts": [{ "type": "image", "blobId": "stub-blob-id", "mediaType": "image/jpeg", "bytes": 5 }]
+    }
+  ]
+}

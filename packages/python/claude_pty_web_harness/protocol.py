@@ -5,7 +5,7 @@ TypedDicts below document the shapes. Kept as dicts at runtime to guarantee
 byte-for-byte parity with the TS server."""
 from __future__ import annotations
 
-from typing import Any, List, Literal, TypedDict
+from typing import Any, List, Literal, TypedDict, Union
 
 SessionStatus = Literal["starting", "ready", "exited", "failed"]
 
@@ -23,14 +23,46 @@ StartupFailure = Literal[
 ]
 
 # ChatEvent variants (discriminated by "kind"). All carry id and optional ts.
-#   user           { id, ts?, kind:"user", text }
-#   assistant_text { id, ts?, kind:"assistant_text", text }
+# "user", "assistant_text", and "tool_result" additionally carry an optional
+# "parts" (a ContentPart list): the lossless, ordered breakdown of a
+# message/tool_result's content blocks. Additive alongside "text" (which stays
+# exactly as it always was, a flattened text-only summary joining only the
+# text parts) so old consumers reading "text" see no change; "parts" is only
+# present when the content had something beyond plain text.
+#   user           { id, ts?, kind:"user", text, parts? }
+#   assistant_text { id, ts?, kind:"assistant_text", text, parts? }
 #   thinking       { id, ts?, kind:"thinking", text }
 #   tool_use       { id, ts?, kind:"tool_use", name, toolUseId, input }
-#   tool_result    { id, ts?, kind:"tool_result", toolUseId, text, isError }
+#   tool_result    { id, ts?, kind:"tool_result", toolUseId, text, isError, parts? }
 #   system         { id, ts?, kind:"system", subtype?, text? }
 #   result         { id, ts?, kind:"result", subtype?, durationMs?, costUsd?, text? }
 ChatEvent = dict[str, Any]
+
+
+# ContentPart variants (discriminated by "type"), documenting the shape of the
+# dicts inside ChatEvent["parts"]. "unknown" exists so a content-block type
+# this library doesn't recognize (e.g. a future Anthropic block type) surfaces
+# visibly instead of silently vanishing the way it used to. Kept as TypedDicts
+# purely for documentation/type-checking; ChatEvent itself stays a plain dict
+# at runtime, same as everywhere else in this file.
+class TextPart(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class ImagePart(TypedDict):
+    type: Literal["image"]
+    blobId: str
+    mediaType: str
+    bytes: int
+
+
+class UnknownPart(TypedDict):
+    type: Literal["unknown"]
+    blockType: str
+
+
+ContentPart = Union[TextPart, ImagePart, UnknownPart]
 
 
 class SessionSummary(TypedDict, total=False):
@@ -52,4 +84,13 @@ class SessionSummary(TypedDict, total=False):
 #   { "type": "prompt", "text": str }
 #   { "type": "interrupt" }
 
-__all__ = ["SessionStatus", "StartupFailure", "ChatEvent", "SessionSummary"]
+__all__ = [
+    "SessionStatus",
+    "StartupFailure",
+    "ChatEvent",
+    "ContentPart",
+    "TextPart",
+    "ImagePart",
+    "UnknownPart",
+    "SessionSummary",
+]

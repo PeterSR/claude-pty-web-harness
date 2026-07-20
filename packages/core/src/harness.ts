@@ -6,6 +6,8 @@ import { resolve as resolvePath, sep } from "node:path";
 import { PupptyeerClient } from "pupptyeer-client";
 import type { Screen } from "pupptyeer-client";
 import { JsonlTailer } from "./jsonl.js";
+import type { ImageSink } from "./jsonl.js";
+import { hashImageBytes } from "./blob.js";
 import {
   readyForInput,
   hasInputPrompt,
@@ -83,6 +85,12 @@ export interface CreateSessionOptions {
   rows?: number;
 }
 
+/** One stored image blob: decoded bytes (never base64) plus its media type. */
+export interface ImageBlob {
+  bytes: Buffer;
+  mediaType: string;
+}
+
 interface Session {
   id: string; // claude session id (--session-id), names the JSONL file
   ptyId: string; // pupptyeer pty session id
@@ -94,6 +102,11 @@ interface Session {
   tailer: JsonlTailer;
   events: ChatEvent[]; // full transcript for replay
   ready: boolean;
+  // Per-session image store, keyed by the content-hash blobId embedded in
+  // ChatEvent image parts. Populated by the ImageSink handed to the tailer as
+  // JSONL is parsed, so a ChatEvent never carries raw bytes; freed with the
+  // rest of the session on kill() since it's just a field on this object.
+  blobs: Map<string, ImageBlob>;
 }
 
 /**
@@ -145,6 +158,15 @@ export class ClaudeHarness extends EventEmitter {
     return this.sessions.get(id)?.events ?? [];
   }
 
+  /**
+   * Bytes + mediaType for a stored image blob, or undefined if the session or
+   * the blobId is unknown. The caller (the server's blob route) is
+   * responsible for validating blobId's shape before ever reaching here.
+   */
+  blob(sessionId: string, blobId: string): ImageBlob | undefined {
+    return this.sessions.get(sessionId)?.blobs.get(blobId);
+  }
+
   private summary(s: Session): SessionSummary {
     return {
       id: s.id,
@@ -179,7 +201,20 @@ export class ClaudeHarness extends EventEmitter {
       rows,
     });
 
-    const tailer = new JsonlTailer(id);
+    const blobs = new Map<string, ImageBlob>();
+    // Decode, hash, and stash each image block's bytes as the JSONL is
+    // parsed, so a ChatEvent handed to a subscriber (or replayed on
+    // reconnect) never carries raw base64 - only the {blobId, mediaType,
+    // bytes} the protocol allows. Same hash in -> same blobId out, so
+    // identical images (even across tool calls) dedupe to one store entry.
+    const onImage: ImageSink = ({ base64, mediaType }) => {
+      const bytes = Buffer.from(base64, "base64");
+      const blobId = hashImageBytes(bytes);
+      if (!blobs.has(blobId)) blobs.set(blobId, { bytes, mediaType });
+      return blobId;
+    };
+
+    const tailer = new JsonlTailer(id, undefined, onImage);
     const session: Session = {
       id,
       ptyId,
@@ -190,6 +225,7 @@ export class ClaudeHarness extends EventEmitter {
       tailer,
       events: [],
       ready: false,
+      blobs,
     };
     this.sessions.set(id, session);
 
@@ -378,6 +414,8 @@ export class ClaudeHarness extends EventEmitter {
     }
     session.status = "exited";
     this.emit("status", id, "exited");
+    // No separate blob cleanup needed: session.blobs is just a field on the
+    // Session object this drops, so it's freed with the rest of the session.
     this.sessions.delete(id);
   }
 }

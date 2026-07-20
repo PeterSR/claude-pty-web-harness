@@ -1,0 +1,7 @@
+{
+  "name": "detect-classify-startup-failure-benign",
+  "module": "detect",
+  "fn": "classifyStartupFailure",
+  "input": { "text": "Welcome back\n❯ " },
+  "expect": null
+}

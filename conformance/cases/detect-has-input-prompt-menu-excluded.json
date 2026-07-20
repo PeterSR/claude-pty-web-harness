@@ -1,0 +1,9 @@
+{
+  "name": "detect-has-input-prompt-menu-excluded",
+  "module": "detect",
+  "fn": "hasInputPrompt",
+  "input": {
+    "lines": ["❯ 1. Yes, I trust this folder"]
+  },
+  "expect": false
+}

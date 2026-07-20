@@ -1,0 +1,7 @@
+{
+  "name": "detect-classify-startup-failure-workspace-trust",
+  "module": "detect",
+  "fn": "classifyStartupFailure",
+  "input": { "text": "Do you trust the files in this folder?" },
+  "expect": "workspace_trust_blocked"
+}

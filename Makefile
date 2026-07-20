@@ -1,6 +1,6 @@
 # Thin wrappers over the npm workspaces and the Python package. The npm scripts
 # and `uv`/`pytest` are the source of truth; these targets just mirror CI.
-.PHONY: install build typecheck test test-js test-py ci clean
+.PHONY: install build typecheck test test-js test-py conformance ci clean
 
 install:
 	npm install
@@ -20,8 +20,14 @@ test-js:
 test-py:
 	cd packages/python && uv run python -m unittest discover -s tests
 
+# Cross-language golden corpus (conformance/cases/) run against both languages'
+# real implementations of jsonl/detect/blob. See conformance/scenario.md and
+# .claude/skills/check-parity/SKILL.md.
+conformance:
+	bash conformance/run.sh
+
 # Mirror the checks the CI workflow runs.
-ci: typecheck test
+ci: typecheck test conformance
 
 clean:
 	rm -rf packages/*/dist packages/python/dist

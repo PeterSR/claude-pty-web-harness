@@ -1,6 +1,6 @@
 {
   "name": "claude-pty-web-harness",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Drive Claude Code in a pty (via pupptyeer) and stream its JSONL transcript into a chat UI. Split into reusable libs.",
   "type": "module",

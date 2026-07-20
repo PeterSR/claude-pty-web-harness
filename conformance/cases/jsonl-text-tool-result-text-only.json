@@ -1,0 +1,27 @@
+{
+  "name": "jsonl-text-tool-result-text-only",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u3",
+      "timestamp": "t4",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "tu1",
+            "is_error": false,
+            "content": [{ "type": "text", "text": "ok" }]
+          }
+        ]
+      }
+    },
+    "lineNo": 4
+  },
+  "expect": [
+    { "id": "u3:tr:0", "ts": "t4", "kind": "tool_result", "toolUseId": "tu1", "text": "ok", "isError": false }
+  ]
+}

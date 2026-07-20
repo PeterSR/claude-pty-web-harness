@@ -1,0 +1,11 @@
+{
+  "name": "detect-ready-for-input-numbered-menu-superscript-digit",
+  "module": "detect",
+  "fn": "readyForInput",
+  "comment": "Same historical-break family: Python's str.isdigit() (unlike str.isdecimal()) returns True for a superscript digit, which is exactly the kind of divergence this corpus exists to catch. Both languages must treat this as the main input prompt, not a numbered menu option.",
+  "input": {
+    "cursor": { "row": 0, "col": 2, "visible": true },
+    "lines": ["❯ ². Trust this folder"]
+  },
+  "expect": true
+}

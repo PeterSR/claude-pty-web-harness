@@ -6,6 +6,7 @@ export { createHarnessClient } from "./api";
 export type { HarnessClient } from "./api";
 export type {
   ChatEvent,
+  ContentPart,
   SessionStatus,
   SessionSummary,
   ServerMessage,

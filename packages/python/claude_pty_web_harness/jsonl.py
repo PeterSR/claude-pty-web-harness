@@ -4,11 +4,23 @@ Mirrors jsonl.ts."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Optional, Tuple
 
 from .protocol import ChatEvent
+
+# Called once per image content block encountered while parsing, so the
+# caller (the harness's per-session blob store) can decode the base64,
+# compute its content hash, stash the bytes, and hand back the blobId to
+# embed in the resulting part: on_image(base64_data, media_type) -> blob_id.
+# This keeps parse_entry itself pure: it never decodes, hashes, or stores
+# anything, and it never puts raw base64 into a ChatEvent. Without a sink
+# there is nowhere for the bytes to go, so an image block degrades to an
+# "unknown" part instead of inventing a placeholder id or leaking the
+# payload. Mirrors ImageSink in jsonl.ts.
+ImageSink = Callable[[str, str], str]
 
 
 def find_jsonl_path(session_id: str) -> Optional[str]:
@@ -35,19 +47,73 @@ def find_jsonl_path(session_id: str) -> Optional[str]:
     return best
 
 
-def _as_text(content: Any) -> str:
+def _base64_decoded_length(data: str) -> int:
+    """Decoded byte length of a base64 string, without raising on malformed
+    input (falls back to 0 rather than propagating a decode error, matching
+    the "fall back, don't throw" rule for malformed image blocks)."""
+    try:
+        return len(base64.b64decode(data, validate=False))
+    except Exception:
+        return 0
+
+
+def _block_to_part(block: dict, on_image: Optional[ImageSink]) -> dict:
+    """One non-text content block -> a ContentPart dict. `blockType` for an
+    "unknown" part is the block's own `type` (or "unknown" if it didn't have
+    one), so a caller/renderer can at least say what kind of block got
+    dropped. Mirrors blockToPart in jsonl.ts."""
+    block_type = block.get("type") if isinstance(block.get("type"), str) else "unknown"
+    if block_type == "image":
+        # Claude Code image blocks look like
+        # {"type":"image","source":{"type":"base64","media_type":"image/png","data":"..."}}.
+        # Anything short of that (missing source/data/media_type) falls
+        # through to the "unknown" return below rather than raising.
+        source = block.get("source")
+        data = source.get("data") if isinstance(source, dict) else None
+        media_type = source.get("media_type") if isinstance(source, dict) else None
+        if isinstance(data, str) and isinstance(media_type, str) and on_image is not None:
+            return {
+                "type": "image",
+                "blobId": on_image(data, media_type),
+                "mediaType": media_type,
+                "bytes": _base64_decoded_length(data),
+            }
+    return {"type": "unknown", "blockType": block_type}
+
+
+def _content_parts(content: Any, on_image: Optional[ImageSink]) -> Tuple[str, Optional[list]]:
+    """Parse an Anthropic `content` field (a plain string, or a list of
+    content blocks) into the flattened legacy text (joining only the `text`
+    blocks, so this matches byte-for-byte what the old text-only parsing
+    produced) plus, only when a block beyond plain text is present, the full
+    ordered part list. Returns (text, None) rather than (text, all-text-parts)
+    so pure-text output stays identical to before this fix (no new key
+    appears). Mirrors parseContent in jsonl.ts."""
     if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        out = []
-        for b in content:
-            if isinstance(b, dict) and "text" in b:
-                out.append(str(b.get("text") or ""))
-        return "".join(out)
-    return ""
+        return content, None
+    if not isinstance(content, list):
+        return "", None
+
+    text_chunks: List[str] = []
+    parts: List[dict] = []
+    has_non_text = False
+
+    for raw in content:
+        if not isinstance(raw, dict):
+            continue
+        if raw.get("type") == "text":
+            t = str(raw.get("text") or "")
+            text_chunks.append(t)
+            parts.append({"type": "text", "text": t})
+        else:
+            has_non_text = True
+            parts.append(_block_to_part(raw, on_image))
+
+    text = "".join(text_chunks)
+    return (text, parts) if has_non_text else (text, None)
 
 
-def parse_entry(entry: dict, line_no: int) -> List[ChatEvent]:
+def parse_entry(entry: dict, line_no: int, on_image: Optional[ImageSink] = None) -> List[ChatEvent]:
     """One parsed JSONL line -> zero or more ChatEvents (wire dicts)."""
     base_id = entry.get("uuid") or f"line-{line_no}"
     ts = entry.get("timestamp")
@@ -63,18 +129,31 @@ def parse_entry(entry: dict, line_no: int) -> List[ChatEvent]:
                 if not isinstance(block, dict):
                     continue
                 if block.get("type") == "tool_result":
-                    out.append({
+                    text, parts = _content_parts(block.get("content"), on_image)
+                    ev = {
                         "id": f"{base_id}:tr:{n}", "ts": ts, "kind": "tool_result",
                         "toolUseId": block.get("tool_use_id") or "",
-                        "text": _as_text(block.get("content")),
+                        "text": text,
                         "isError": bool(block.get("is_error")),
-                    })
+                    }
+                    if parts is not None:
+                        ev["parts"] = parts
+                    out.append(ev)
                     n += 1
                 elif block.get("type") == "text" or isinstance(block.get("text"), str):
                     out.append({"id": f"{base_id}:u:{n}", "ts": ts, "kind": "user", "text": str(block.get("text") or "")})
                     n += 1
+                else:
+                    # A non-text, non-tool_result block (e.g. a user-pasted
+                    # image) used to match neither branch above and vanish
+                    # with no trace.
+                    out.append({
+                        "id": f"{base_id}:x:{n}", "ts": ts, "kind": "user", "text": "",
+                        "parts": [_block_to_part(block, on_image)],
+                    })
+                    n += 1
         else:
-            text = _as_text(content)
+            text, _ = _content_parts(content, on_image)
             if text.strip():
                 out.append({"id": base_id, "ts": ts, "kind": "user", "text": text})
 
@@ -99,6 +178,14 @@ def parse_entry(entry: dict, line_no: int) -> List[ChatEvent]:
                     "name": str(block.get("name") or "tool"),
                     "toolUseId": str(block.get("id") or ""),
                     "input": block.get("input"),
+                })
+                n += 1
+            else:
+                # Unrecognized block type (e.g. redacted_thinking) used to
+                # fall through with no branch and vanish; surface it instead.
+                out.append({
+                    "id": f"{base_id}:x:{n}", "ts": ts, "kind": "assistant_text", "text": "",
+                    "parts": [_block_to_part(block, on_image)],
                 })
                 n += 1
 
@@ -129,10 +216,17 @@ class JsonlTailer:
     parsed ChatEvent. Waits for the file to appear (claude creates it after the
     first turn). Polling-based for robustness."""
 
-    def __init__(self, session_id: str, on_event: Callable[[ChatEvent], None], interval: float = 0.2):
+    def __init__(
+        self,
+        session_id: str,
+        on_event: Callable[[ChatEvent], None],
+        interval: float = 0.2,
+        on_image: Optional[ImageSink] = None,
+    ):
         self.session_id = session_id
         self.on_event = on_event
         self.interval = interval
+        self.on_image = on_image
 
     async def run(self) -> None:
         offset = 0
@@ -160,7 +254,7 @@ class JsonlTailer:
                             entry = json.loads(raw.decode("utf-8", "replace"))
                         except json.JSONDecodeError:
                             continue
-                        for ev in parse_entry(entry, line_no):
+                        for ev in parse_entry(entry, line_no, self.on_image):
                             self.on_event(ev)
             except asyncio.CancelledError:
                 raise

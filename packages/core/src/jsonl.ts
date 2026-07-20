@@ -5,7 +5,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
-import type { ChatEvent } from "@petersr/claude-pty-web-harness-protocol";
+import type { ChatEvent, ContentPart } from "@petersr/claude-pty-web-harness-protocol";
 
 /**
  * Find the JSONL file Claude writes for a given session id. Claude encodes the
@@ -55,18 +55,80 @@ interface RawEntry {
   result?: string;
 }
 
-function asText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((b) => (b && typeof b === "object" && "text" in b ? String((b as any).text ?? "") : ""))
-      .join("");
+/**
+ * Called once per image content block encountered while parsing, so the
+ * caller (the harness's per-session blob store) can decode the base64,
+ * compute its content hash, stash the bytes, and hand back the blobId to
+ * embed in the resulting ContentPart. This keeps parseEntry itself pure: it
+ * never decodes, hashes, or stores anything, and it never puts raw base64
+ * into a ChatEvent. Without a sink there is nowhere for the bytes to go, so
+ * an image block degrades to an "unknown" part instead of inventing a
+ * placeholder id or leaking the payload.
+ */
+export type ImageSink = (payload: { base64: string; mediaType: string }) => string;
+
+/**
+ * One non-text content block -> a ContentPart. `blockType` for an "unknown"
+ * part is the block's own `type` string (or "unknown" if it didn't have one),
+ * so a caller/renderer can at least say what kind of block got dropped.
+ */
+function blockToPart(block: Record<string, unknown>, onImage?: ImageSink): ContentPart {
+  const blockType = typeof block.type === "string" ? block.type : "unknown";
+  if (blockType === "image") {
+    // Claude Code image blocks look like
+    // {"type":"image","source":{"type":"base64","media_type":"image/png","data":"..."}}.
+    // Anything short of that (missing source/data/media_type) falls through
+    // to the "unknown" return below rather than throwing.
+    const source = block.source as Record<string, unknown> | undefined;
+    const base64 = source && typeof source === "object" && typeof source.data === "string" ? source.data : undefined;
+    const mediaType =
+      source && typeof source === "object" && typeof source.media_type === "string" ? source.media_type : undefined;
+    if (base64 !== undefined && mediaType !== undefined && onImage) {
+      return { type: "image", blobId: onImage({ base64, mediaType }), mediaType, bytes: Buffer.byteLength(base64, "base64") };
+    }
   }
-  return "";
+  return { type: "unknown", blockType };
 }
 
-/** Convert one parsed JSONL entry into zero or more ChatEvents. */
-export function parseEntry(entry: RawEntry, lineNo: number): ChatEvent[] {
+/**
+ * Parse an Anthropic `content` field (a plain string, or an array of content
+ * blocks) into the flattened legacy text (joining only the `text` blocks, so
+ * this matches byte-for-byte what the old text-only parsing produced) plus,
+ * only when a block beyond plain text is present, the full ordered part list.
+ * `parts` is omitted rather than set to an all-text array so pure-text output
+ * stays identical to before this fix (no new key appears).
+ */
+function parseContent(content: unknown, onImage?: ImageSink): { text: string; parts?: ContentPart[] } {
+  if (typeof content === "string") return { text: content };
+  if (!Array.isArray(content)) return { text: "" };
+
+  const textChunks: string[] = [];
+  const parts: ContentPart[] = [];
+  let hasNonText = false;
+
+  for (const raw of content) {
+    if (!raw || typeof raw !== "object") continue;
+    const block = raw as Record<string, unknown>;
+    if (block.type === "text") {
+      const t = String(block.text ?? "");
+      textChunks.push(t);
+      parts.push({ type: "text", text: t });
+    } else {
+      hasNonText = true;
+      parts.push(blockToPart(block, onImage));
+    }
+  }
+
+  const text = textChunks.join("");
+  return hasNonText ? { text, parts } : { text };
+}
+
+/**
+ * Convert one parsed JSONL entry into zero or more ChatEvents. `onImage`, if
+ * given, is forwarded to parseContent for every image block encountered (see
+ * ImageSink); parseEntry does no I/O of its own either way.
+ */
+export function parseEntry(entry: RawEntry, lineNo: number, onImage?: ImageSink): ChatEvent[] {
   const baseId = entry.uuid || `line-${lineNo}`;
   const ts = entry.timestamp;
   const out: ChatEvent[] = [];
@@ -79,20 +141,26 @@ export function parseEntry(entry: RawEntry, lineNo: number): ChatEvent[] {
         for (const block of content as any[]) {
           if (!block || typeof block !== "object") continue;
           if (block.type === "tool_result") {
+            const { text, parts } = parseContent(block.content, onImage);
             out.push({
               id: `${baseId}:tr:${blockNo++}`,
               ts,
               kind: "tool_result",
               toolUseId: block.tool_use_id ?? "",
-              text: asText(block.content),
+              text,
               isError: Boolean(block.is_error),
+              ...(parts ? { parts } : {}),
             });
           } else if (block.type === "text" || typeof block.text === "string") {
             out.push({ id: `${baseId}:u:${blockNo++}`, ts, kind: "user", text: String(block.text ?? "") });
+          } else {
+            // A non-text, non-tool_result block (e.g. a user-pasted image)
+            // used to match neither branch above and vanish with no trace.
+            out.push({ id: `${baseId}:x:${blockNo++}`, ts, kind: "user", text: "", parts: [blockToPart(block, onImage)] });
           }
         }
       } else {
-        const text = asText(content);
+        const { text } = parseContent(content, onImage);
         if (text.trim()) out.push({ id: baseId, ts, kind: "user", text });
       }
       break;
@@ -118,6 +186,16 @@ export function parseEntry(entry: RawEntry, lineNo: number): ChatEvent[] {
             name: String(block.name ?? "tool"),
             toolUseId: String(block.id ?? ""),
             input: block.input,
+          });
+        } else {
+          // Unrecognized block type (e.g. redacted_thinking) used to fall off
+          // the end with no branch and vanish; surface it instead.
+          out.push({
+            id: `${baseId}:x:${blockNo++}`,
+            ts,
+            kind: "assistant_text",
+            text: "",
+            parts: [blockToPart(block, onImage)],
           });
         }
       }
@@ -169,7 +247,11 @@ export class JsonlTailer extends EventEmitter {
   private stopped = false;
   private inFlight = false;
 
-  constructor(private readonly sessionId: string, private readonly intervalMs = 200) {
+  constructor(
+    private readonly sessionId: string,
+    private readonly intervalMs = 200,
+    private readonly onImage?: ImageSink,
+  ) {
     super();
   }
 
@@ -227,7 +309,7 @@ export class JsonlTailer extends EventEmitter {
         } catch {
           continue;
         }
-        for (const ev of parseEntry(entry, this.lineNo)) {
+        for (const ev of parseEntry(entry, this.lineNo, this.onImage)) {
           this.emit("event", ev);
         }
       }

@@ -21,9 +21,21 @@ All JSON uses camelCase keys. The default route prefix is `/api` (configurable).
 | `GET` | `/api/sessions/:id` | | `SessionSummary` (404 if unknown) |
 | `DELETE` | `/api/sessions/:id` | | `{ "ok": true }` (kills the session) |
 | `POST` | `/api/sessions/:id/prompt` | `{ text }` | `{ "ok": true }` |
+| `GET` | `/api/sessions/:id/blobs/:blobId` | | raw image bytes (404 if unknown) |
 
 Errors return a non-2xx status with `{ "error": string }`. `POST /api/sessions`
 returns 400 (missing `cwd`), 403 (`cwd` outside `allowedRoots`), or 500.
+
+`GET /api/sessions/:id/blobs/:blobId` serves the bytes behind an `image`
+`ContentPart` (see below): decoded, never-base64 bytes from the harness's
+per-session blob store, keyed by the SHA-256 hex content hash embedded as
+`blobId`. `blobId` is validated against `^[a-f0-9]{64}$` before any lookup;
+`Content-Type` is served only from an allowlist (`image/png`, `image/jpeg`,
+`image/gif`, `image/webp` - anything else becomes `application/octet-stream`),
+with `X-Content-Type-Options: nosniff` and `Content-Disposition: inline`. An
+unknown session and an unknown blob both 404 identically, so the response
+never reveals which one missed. The content is hash-addressed and immutable,
+so the response also carries `Cache-Control: public, max-age=31536000, immutable`.
 
 ## WebSocket
 
@@ -93,11 +105,38 @@ built from the JSONL Claude persists (the pty is used for input and to drive the
 startup modals).
 
 ```
-user           { kind: "user",           text }
-assistant_text { kind: "assistant_text", text }
+user           { kind: "user",           text, parts? }
+assistant_text { kind: "assistant_text", text, parts? }
 thinking       { kind: "thinking",       text }
 tool_use       { kind: "tool_use",       name, toolUseId, input }
-tool_result    { kind: "tool_result",    toolUseId, text, isError }
+tool_result    { kind: "tool_result",    toolUseId, text, isError, parts? }
 system         { kind: "system",         subtype?, text? }
 result         { kind: "result",         subtype?, durationMs?, costUsd?, text? }
 ```
+
+- `text` stays exactly as it always was: a flattened, text-only summary
+  (joining only the plain-text content blocks). Old consumers that only read
+  `text` see no change.
+- `parts`, present only when there is something beyond plain text, is the
+  lossless ordered breakdown of that message/tool result's content blocks (see
+  `ContentPart` below). A pure-text event never gains a `parts` key.
+
+### ContentPart
+
+A discriminated union on `type`, one entry per content block:
+
+```
+text    { type: "text",    text }
+image   { type: "image",   blobId, mediaType, bytes }
+unknown { type: "unknown", blockType }
+```
+
+- `image`: `blobId` is the SHA-256 hex content hash of the decoded bytes -
+  fetch them from `GET /api/sessions/:id/blobs/:blobId` (above). `bytes` is
+  the decoded byte size. The raw bytes never travel inside a `ChatEvent`
+  (they'd sit in the in-memory transcript for the session's life and get
+  re-sent on every WebSocket reconnect); only the id, media type, and size do.
+- `unknown`: a content-block type this library doesn't recognize (e.g. a
+  future Anthropic block type). `blockType` is that block's own `type` string,
+  so a renderer can at least say what kind of content it can't show yet,
+  instead of silently dropping it the way earlier versions did.

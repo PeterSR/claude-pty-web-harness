@@ -19,6 +19,7 @@ export function ChatWindow({
   connected,
   onSend,
   onInterrupt,
+  blobUrl,
 }: {
   events: ChatEvent[];
   status: SessionStatus;
@@ -26,6 +27,7 @@ export function ChatWindow({
   connected: boolean;
   onSend: (text: string) => void;
   onInterrupt: () => void;
+  blobUrl?: (blobId: string) => string;
 }) {
   const [text, setText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -61,7 +63,7 @@ export function ChatWindow({
           </div>
         )}
         {events.map((e) => (
-          <ChatMessage key={e.id} event={e} />
+          <ChatMessage key={e.id} event={e} blobUrl={blobUrl} />
         ))}
       </div>
 

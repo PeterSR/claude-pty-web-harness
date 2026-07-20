@@ -1,0 +1,17 @@
+{
+  "name": "jsonl-text-user-array-text-block",
+  "module": "jsonl",
+  "fn": "parseEntry",
+  "input": {
+    "entry": {
+      "type": "user",
+      "uuid": "u2",
+      "timestamp": "t2",
+      "message": { "role": "user", "content": [{ "type": "text", "text": "block text" }] }
+    },
+    "lineNo": 2
+  },
+  "expect": [
+    { "id": "u2:u:0", "ts": "t2", "kind": "user", "text": "block text" }
+  ]
+}

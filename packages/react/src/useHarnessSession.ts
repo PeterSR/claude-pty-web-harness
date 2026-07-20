@@ -18,6 +18,8 @@ export interface HarnessSession {
   connected: boolean;
   sendPrompt: (text: string) => void;
   interrupt: () => void;
+  /** URL for an image ContentPart's blobId (an <img src>), scoped to this session. */
+  blobUrl: (blobId: string) => string;
 }
 
 export function useHarnessSession(
@@ -102,5 +104,10 @@ export function useHarnessSession(
 
   const interrupt = useCallback(() => send({ type: "interrupt" }), [send]);
 
-  return { events, status, error, connected, sendPrompt, interrupt };
+  const blobUrl = useCallback(
+    (blobId: string) => (sessionId ? client.blobUrl(sessionId, blobId) : ""),
+    [client, sessionId],
+  );
+
+  return { events, status, error, connected, sendPrompt, interrupt, blobUrl };
 }

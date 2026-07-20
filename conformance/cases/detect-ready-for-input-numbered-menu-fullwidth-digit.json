@@ -1,0 +1,11 @@
+{
+  "name": "detect-ready-for-input-numbered-menu-fullwidth-digit",
+  "module": "detect",
+  "fn": "readyForInput",
+  "comment": "Same historical-break family as the Arabic-Indic case: a fullwidth digit must not be treated as ASCII '0'-'9', so this row is the main input prompt, not a numbered menu option.",
+  "input": {
+    "cursor": { "row": 0, "col": 2, "visible": true },
+    "lines": ["❯ ２. Trust this folder"]
+  },
+  "expect": true
+}

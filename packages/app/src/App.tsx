@@ -140,6 +140,7 @@ export default function App() {
             connected={active.connected}
             onSend={active.sendPrompt}
             onInterrupt={active.interrupt}
+            blobUrl={active.blobUrl}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-600">

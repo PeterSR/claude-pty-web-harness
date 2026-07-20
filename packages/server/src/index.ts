@@ -38,12 +38,23 @@ export interface HarnessRouteOptions {
  * Wire a ClaudeHarness onto a Fastify app:
  *   GET    {prefix}/health
  *   GET    {prefix}/sessions
- *   POST   {prefix}/sessions            { cwd, model? }
+ *   POST   {prefix}/sessions                   { cwd, model? }
  *   GET    {prefix}/sessions/:id
  *   DELETE {prefix}/sessions/:id
- *   POST   {prefix}/sessions/:id/prompt { text }
+ *   POST   {prefix}/sessions/:id/prompt        { text }
+ *   GET    {prefix}/sessions/:id/blobs/:blobId
  *   WS     {prefix}/sessions/:id/stream
  */
+// Only a lowercase hex SHA-256 digest is ever a real blobId (see
+// ClaudeHarness's blob store); reject anything else before it ever reaches
+// harness.blob(), since this content comes from MCP tool output and is not
+// fully trusted.
+const BLOB_ID_RE = /^[a-f0-9]{64}$/;
+// Anything outside this allowlist is served as application/octet-stream
+// rather than trusting the mediaType a tool reported, so a browser is never
+// handed a Content-Type it might sniff into executing.
+const BLOB_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
 export async function registerHarnessRoutes(
   app: FastifyInstance,
   harness: ClaudeHarness,
@@ -134,6 +145,31 @@ export async function registerHarnessRoutes(
       reply.code(404);
       return { error: String((err as Error).message ?? err) };
     }
+  });
+
+  app.get(`${prefix}/sessions/:id/blobs/:blobId`, guarded, async (req, reply) => {
+    const { id, blobId } = req.params as { id: string; blobId: string };
+    // Unknown session and unknown blob (and a malformed blobId) all 404 with
+    // the same body, so a caller can't use the response to probe which of the
+    // two didn't exist.
+    if (!BLOB_ID_RE.test(blobId)) {
+      reply.code(404);
+      return { error: "not found" };
+    }
+    const found = harness.blob(id, blobId);
+    if (!found) {
+      reply.code(404);
+      return { error: "not found" };
+    }
+    const contentType = BLOB_CONTENT_TYPES.has(found.mediaType) ? found.mediaType : "application/octet-stream";
+    reply
+      .header("content-type", contentType)
+      .header("x-content-type-options", "nosniff")
+      .header("content-disposition", "inline")
+      // Content-addressed and immutable: the blobId is a hash of the bytes,
+      // so this response can never go stale.
+      .header("cache-control", "public, max-age=31536000, immutable");
+    return reply.send(found.bytes);
   });
 
   app.get(`${prefix}/sessions/:id/stream`, { websocket: true }, async (socket: WebSocket, req) => {

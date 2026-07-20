@@ -1,0 +1,7 @@
+{
+  "name": "detect-is-hard-startup-failure-workspace-trust",
+  "module": "detect",
+  "fn": "isHardStartupFailure",
+  "input": { "failure": "workspace_trust_blocked" },
+  "expect": false
+}

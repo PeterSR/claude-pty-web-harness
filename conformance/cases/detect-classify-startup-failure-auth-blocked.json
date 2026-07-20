@@ -1,0 +1,7 @@
+{
+  "name": "detect-classify-startup-failure-auth-blocked",
+  "module": "detect",
+  "fn": "classifyStartupFailure",
+  "input": { "text": "❯ \nfailed to authenticate" },
+  "expect": "auth_blocked"
+}

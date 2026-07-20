@@ -1,0 +1,9 @@
+{
+  "name": "detect-has-input-prompt-bare-glyph",
+  "module": "detect",
+  "fn": "hasInputPrompt",
+  "input": {
+    "lines": ["welcome", "❯ "]
+  },
+  "expect": true
+}

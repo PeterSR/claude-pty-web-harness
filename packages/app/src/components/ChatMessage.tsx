@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChatEvent } from "@petersr/claude-pty-web-harness-protocol";
+import type { ChatEvent, ContentPart } from "@petersr/claude-pty-web-harness-protocol";
 
 function Bubble({
   align,
@@ -26,6 +26,42 @@ function Pre({ children }: { children: React.ReactNode }) {
   return <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">{children}</pre>;
 }
 
+/**
+ * Renders a ChatEvent's `parts` in order: text like today's `<Pre>`, an image
+ * as an `<img>` against the blob route, and an unrecognized block as a small
+ * visible chip (rather than the silent drop this fixes) so it's obvious
+ * something arrived that this UI doesn't know how to show yet.
+ */
+function ContentParts({ parts, blobUrl }: { parts: ContentPart[]; blobUrl?: (blobId: string) => string }) {
+  return (
+    <div className="space-y-2">
+      {parts.map((part, i) => {
+        if (part.type === "text") {
+          return part.text ? <Pre key={i}>{part.text}</Pre> : null;
+        }
+        if (part.type === "image") {
+          return (
+            <img
+              key={i}
+              src={blobUrl ? blobUrl(part.blobId) : undefined}
+              alt={part.mediaType}
+              className="max-w-full rounded-lg border border-slate-700"
+            />
+          );
+        }
+        return (
+          <span
+            key={i}
+            className="inline-block rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300/80"
+          >
+            [unsupported block: {part.blockType}]
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function fmtInput(input: unknown): string {
   try {
     const s = JSON.stringify(input, null, 2);
@@ -35,21 +71,27 @@ function fmtInput(input: unknown): string {
   }
 }
 
-export function ChatMessage({ event }: { event: ChatEvent }) {
+export function ChatMessage({
+  event,
+  blobUrl,
+}: {
+  event: ChatEvent;
+  blobUrl?: (blobId: string) => string;
+}) {
   const [open, setOpen] = useState(false);
 
   switch (event.kind) {
     case "user":
       return (
         <Bubble align="right" label="You" tone="border-blue-500/30 bg-blue-500/15 text-blue-50">
-          <Pre>{event.text}</Pre>
+          {event.parts ? <ContentParts parts={event.parts} blobUrl={blobUrl} /> : <Pre>{event.text}</Pre>}
         </Bubble>
       );
 
     case "assistant_text":
       return (
         <Bubble align="left" label="Claude" tone="border-slate-600/40 bg-slate-700/30 text-slate-100">
-          <Pre>{event.text}</Pre>
+          {event.parts ? <ContentParts parts={event.parts} blobUrl={blobUrl} /> : <Pre>{event.text}</Pre>}
         </Bubble>
       );
 
@@ -97,9 +139,15 @@ export function ChatMessage({ event }: { event: ChatEvent }) {
             >
               {event.isError ? "Tool error" : "Tool result"}
             </div>
-            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed opacity-90">
-              {event.text || "(empty)"}
-            </pre>
+            {event.parts ? (
+              <div className="mt-1 max-h-48 overflow-auto">
+                <ContentParts parts={event.parts} blobUrl={blobUrl} />
+              </div>
+            ) : (
+              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed opacity-90">
+                {event.text || "(empty)"}
+              </pre>
+            )}
           </div>
         </div>
       );

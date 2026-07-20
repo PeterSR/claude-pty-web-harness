@@ -41,7 +41,10 @@ await harness.sendPrompt(session.id, "first line\nsecond line"); // multi-line, 
 ```
 
 Also: `harness.list()`, `harness.get(id)`, `harness.transcript(id)`,
-`harness.interrupt(id)`, `harness.kill(id)`.
+`harness.interrupt(id)`, `harness.kill(id)`, and `harness.blob(sessionId,
+blobId)` (bytes + mediaType for an `image` `ContentPart`, or `undefined` -
+back the `GET /:id/blobs/:blobId` route with it; never inline the bytes into a
+`ChatEvent`).
 
 See the [project README](https://github.com/PeterSR/claude-pty-web-harness#readme)
 and [USAGE.md](https://github.com/PeterSR/claude-pty-web-harness/blob/main/USAGE.md)

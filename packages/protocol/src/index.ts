@@ -2,13 +2,27 @@
 // and any client (the React hook, or a completely different UI). Types only,
 // zero runtime, so every consumer agrees on one ChatEvent/Server/Client shape.
 
+/**
+ * One block of content within a ChatEvent's `parts` array: the lossless,
+ * ordered breakdown of a message/tool_result's content blocks. Additive
+ * alongside `text` (which stays exactly as it always was, a flattened
+ * text-only summary joining only the `text` parts) so old consumers reading
+ * `text` see no change. `unknown` exists so a content-block type this library
+ * doesn't recognize (e.g. a future Anthropic block type) surfaces visibly
+ * instead of silently vanishing the way it used to.
+ */
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; blobId: string; mediaType: string; bytes: number }
+  | { type: "unknown"; blockType: string };
+
 /** A single rendered item in the chat transcript, derived from Claude's JSONL. */
 export type ChatEvent =
-  | { id: string; ts?: string; kind: "user"; text: string }
-  | { id: string; ts?: string; kind: "assistant_text"; text: string }
+  | { id: string; ts?: string; kind: "user"; text: string; parts?: ContentPart[] }
+  | { id: string; ts?: string; kind: "assistant_text"; text: string; parts?: ContentPart[] }
   | { id: string; ts?: string; kind: "thinking"; text: string }
   | { id: string; ts?: string; kind: "tool_use"; name: string; toolUseId: string; input: unknown }
-  | { id: string; ts?: string; kind: "tool_result"; toolUseId: string; text: string; isError: boolean }
+  | { id: string; ts?: string; kind: "tool_result"; toolUseId: string; text: string; isError: boolean; parts?: ContentPart[] }
   | { id: string; ts?: string; kind: "system"; subtype?: string; text?: string }
   | { id: string; ts?: string; kind: "result"; subtype?: string; durationMs?: number; costUsd?: number; text?: string };
 

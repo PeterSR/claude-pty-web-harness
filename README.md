@@ -175,6 +175,7 @@ configurable:
 - `GET    /api/sessions` → list
 - `DELETE /api/sessions/:id` → kill
 - `POST   /api/sessions/:id/prompt` `{ text }` → type a prompt
+- `GET    /api/sessions/:id/blobs/:blobId` → raw bytes for an `image` `ContentPart`
 - `WS     /api/sessions/:id/stream` → replays transcript + status, then streams
   `{type:"chat",event}` / `{type:"status",status,error?}`; accepts
   `{type:"prompt",text}` / `{type:"interrupt"}`.

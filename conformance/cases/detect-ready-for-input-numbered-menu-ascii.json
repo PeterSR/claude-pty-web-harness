@@ -1,0 +1,10 @@
+{
+  "name": "detect-ready-for-input-numbered-menu-ascii",
+  "module": "detect",
+  "fn": "readyForInput",
+  "input": {
+    "cursor": { "row": 0, "col": 2, "visible": true },
+    "lines": ["❯ 1. Yes, I trust this folder", "  2. No"]
+  },
+  "expect": false
+}
