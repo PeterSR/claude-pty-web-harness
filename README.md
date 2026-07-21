@@ -114,8 +114,9 @@ await harness.sendPrompt(id, "first line\nsecond line"); // multi-line, sent as 
 ```
 
 `createSession` also takes `command`, `permissionMode` (see [Permission
-modes](#permission-modes)), and `extraArgs` if you want to drive something other
-than the default `claude --permission-mode bypassPermissions`.
+modes](#permission-modes)), `extraArgs`, and `env` (merged over the daemon's
+own environment for the spawned process - see USAGE.md) if you want to drive
+something other than the default `claude --permission-mode bypassPermissions`.
 `sendPrompt` delivers the text as a bracketed paste so multi-line input lands in
 the TUI intact, then submits with one Enter (pass `{ submit: false }` to stage
 without sending). Before writing anything it captures the screen once and

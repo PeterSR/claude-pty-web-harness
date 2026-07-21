@@ -56,7 +56,9 @@ await harness.send_prompt(summary["id"], "first line\nsecond line")  # multi-lin
 #       await harness.interrupt(id), await harness.kill(id)
 ```
 
-`create_session` also takes `command`, `permission_mode`, and `extra_args`.
+`create_session` also takes `command`, `permission_mode`, `extra_args`, and
+`env` (merged over the daemon's own environment for the spawned process; see
+USAGE.md), plus `cols`/`rows`.
 `send_prompt` delivers the text as a bracketed paste so multi-line input lands in
 the TUI intact, then submits with one Enter (pass `submit=False` to stage it).
 

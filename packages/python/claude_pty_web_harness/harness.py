@@ -203,7 +203,14 @@ class ClaudeHarness:
         extra_args: Optional[List[str]] = None,
         cols: int = 120,
         rows: int = 40,
+        env: Optional[Dict[str, str]] = None,
     ) -> SessionSummary:
+        """`env` is merged by the daemon over its own environment for the
+        spawned process. Exposed because some behaviour of the launched CLI is
+        only configurable through the environment, and the alternative is
+        setting it on the daemon itself, which would leak into every other
+        app's sessions in the shared namespace rather than just this one.
+        Mirrors CreateSessionOptions.env in harness.ts."""
         cwd = self._check_cwd(cwd)
         session_id = str(uuid.uuid4())
         args: List[str] = ["--session-id", session_id]
@@ -214,7 +221,7 @@ class ClaudeHarness:
         if extra_args:
             args += list(extra_args)
 
-        pty_id = await asyncio.to_thread(self._client.new_session, command, args, cwd, None, cols, rows)
+        pty_id = await asyncio.to_thread(self._client.new_session, command, args, cwd, env, cols, rows)
 
         s = _Session(
             id=session_id,

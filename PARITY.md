@@ -83,7 +83,7 @@ it actually surfaced, by the `sink: "real"` cases `jsonl-real-sink-valid-image` 
 |---|---|---|
 | connect (or scream) | `ClaudeHarness.create(opts?)` | `ClaudeHarness.create(socket_path=, readiness=, allowed_roots=)` |
 | namespace constant | `HARNESS_NAMESPACE` | `HARNESS_NAMESPACE` |
-| create a session | `createSession(opts)` | `create_session(*, cwd, command=, model=, permission_mode=, extra_args=, cols=, rows=)` |
+| create a session | `createSession(opts)` - `opts.env` (new) merges over the daemon's own environment for the spawned process, omitted entirely from the call to the client when not supplied | `create_session(*, cwd, command=, model=, permission_mode=, extra_args=, cols=, rows=, env=)` (new) - same merge, sent as `None` (not `{}`) when not supplied |
 | list sessions | `list()` | `list()` |
 | get one session | `get(id)` | `get(session_id)` |
 | full transcript (for WS replay) | `transcript(id)` | `transcript(session_id)` |

@@ -16,7 +16,7 @@
 // fast and deterministic.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Screen, SessionInfo } from "pupptyeer-client";
+import type { NewSessionOptions, Screen, SessionInfo } from "pupptyeer-client";
 import { ClaudeHarness, PickerOpenError } from "./harness.js";
 
 class FakeClient {
@@ -32,6 +32,8 @@ class FakeClient {
    * steady-state value/error that holds across as many polls as it drives.
    */
   listSessionsResults: Array<SessionInfo[] | Error> = [[]];
+  /** Every options object createSession's newSession call was given, recorded verbatim. */
+  newSessionCalls: NewSessionOptions[] = [];
 
   constructor(
     private readonly screen: Screen | null = null,
@@ -57,6 +59,17 @@ class FakeClient {
     const next = this.listSessionsResults.length > 1 ? this.listSessionsResults.shift()! : this.listSessionsResults[0];
     if (next instanceof Error) throw next;
     return next;
+  }
+
+  async newSession(opts: NewSessionOptions): Promise<string> {
+    this.newSessionCalls.push(opts);
+    return `pty-${this.newSessionCalls.length}`;
+  }
+
+  async kill(_ptyId: string): Promise<void> {
+    // Unused by the assertions below; present only so createSession's cleanup
+    // kill() call (used to stop the tailer/exit-watch timers this test's
+    // createSession() call started for real) has somewhere to land.
   }
 }
 
@@ -148,6 +161,67 @@ test("sendPrompt: an unknown session id throws before ever capturing", async () 
   (h as any).client = fake;
   await assert.rejects(h.sendPrompt("nope", "hello"), /unknown session/);
   assert.equal(fake.captureCalls, 0);
+});
+
+// --- createSession: env -----------------------------------------------------
+//
+// createSession builds a fresh session for real (id, tailer, driveStartup),
+// unlike the seam above, so each test here uses a FakeClient whose
+// captureScreen resolves readyScreen() - driveStartup then reaches readiness
+// on its first capture instead of polling on a real timer - and calls kill()
+// once it's done asserting, so the tailer's poll interval and the exit
+// watcher (both real setInterval timers by this point) are stopped before the
+// test ends rather than left dangling for the rest of the suite.
+//
+// baseOpts is shared across both tests below with every optional field given
+// an explicit, non-default value so the two calls are identical apart from
+// env: that's what lets asserting the same command/args/cwd/cols/rows in
+// both stand in for "the other session-creation arguments are unaffected by
+// supplying env," rather than that being a claim taken on faith.
+const baseOpts = {
+  cwd: "/tmp",
+  command: "claude",
+  model: "opus",
+  permissionMode: "acceptEdits",
+  extraArgs: ["--foo"],
+  cols: 100,
+  rows: 30,
+};
+
+test("createSession: env is passed through verbatim to newSession", async () => {
+  const fake = new FakeClient(readyScreen());
+  const h = new ClaudeHarness();
+  (h as any).client = fake;
+
+  const summary = await h.createSession({ ...baseOpts, env: { FOO: "bar" } });
+  assert.equal(fake.newSessionCalls.length, 1);
+  const call = fake.newSessionCalls[0];
+  assert.deepEqual(call.env, { FOO: "bar" });
+  assert.equal(call.command, "claude");
+  assert.deepEqual(call.args, ["--session-id", summary.id, "--permission-mode", "acceptEdits", "--model", "opus", "--foo"]);
+  assert.equal(call.cwd, "/tmp");
+  assert.equal(call.cols, 100);
+  assert.equal(call.rows, 30);
+
+  await h.kill(summary.id);
+});
+
+test("createSession: env is omitted entirely from newSession when not supplied", async () => {
+  const fake = new FakeClient(readyScreen());
+  const h = new ClaudeHarness();
+  (h as any).client = fake;
+
+  const summary = await h.createSession({ ...baseOpts });
+  assert.equal(fake.newSessionCalls.length, 1);
+  const call = fake.newSessionCalls[0];
+  assert.equal("env" in call, false, "env must be absent from the options object, not sent as null or {}");
+  assert.equal(call.command, "claude");
+  assert.deepEqual(call.args, ["--session-id", summary.id, "--permission-mode", "acceptEdits", "--model", "opus", "--foo"]);
+  assert.equal(call.cwd, "/tmp");
+  assert.equal(call.cols, 100);
+  assert.equal(call.rows, 30);
+
+  await h.kill(summary.id);
 });
 
 // --- exit watcher -----------------------------------------------------------

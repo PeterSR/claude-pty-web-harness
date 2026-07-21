@@ -27,6 +27,8 @@ class FakeClient:
         # single steady-state value/error that holds across as many polls as
         # it drives. Mirrors FakeClient.listSessionsResults in harness.test.ts.
         self.list_sessions_results = [[]]
+        # Every positional call new_session() received, recorded verbatim.
+        self.new_session_calls = []
 
     def write_pane(self, session, data) -> None:
         self.writes.append(data)
@@ -46,6 +48,18 @@ class FakeClient:
         if isinstance(result, Exception):
             raise result
         return result
+
+    def new_session(self, command, args, cwd, env, cols, rows):
+        self.new_session_calls.append(
+            {"command": command, "args": args, "cwd": cwd, "env": env, "cols": cols, "rows": rows}
+        )
+        return f"pty-{len(self.new_session_calls)}"
+
+    def kill(self, pty_id) -> None:
+        # Unused by the assertions below; present only so create_session's
+        # cleanup kill() call (used to stop the tailer/exit-watch tasks this
+        # test's create_session() call started for real) has somewhere to land.
+        pass
 
 
 def _empty_screen() -> Screen:
@@ -127,6 +141,71 @@ class TestSendPrompt(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(KeyError):
             await h.send_prompt("nope", "hello")
         self.assertEqual(fake.capture_calls, 0)
+
+
+# --- create_session: env ------------------------------------------------------
+#
+# create_session builds a fresh session for real (id, tailer task, drive-startup
+# task), unlike _harness_with_session above, so each test here uses a
+# FakeClient whose capture_screen resolves _ready_screen() - _drive_startup
+# then reaches readiness on its first capture instead of polling - and calls
+# kill() once it's done asserting, so the tailer's and exit watcher's real
+# asyncio tasks are cancelled before the test ends rather than left running.
+#
+# base_opts is shared across both tests below with every optional argument
+# given an explicit, non-default value so the two calls are identical apart
+# from env: that's what lets asserting the same command/args/cwd/cols/rows in
+# both stand in for "the other session-creation arguments are unaffected by
+# supplying env," rather than that being a claim taken on faith.
+_base_opts = dict(
+    cwd="/tmp",
+    command="claude",
+    model="opus",
+    permission_mode="acceptEdits",
+    extra_args=["--foo"],
+    cols=100,
+    rows=30,
+)
+
+
+class TestCreateSessionEnv(unittest.IsolatedAsyncioTestCase):
+    async def test_env_passed_through_verbatim(self):
+        fake = FakeClient(screen=_ready_screen())
+        h = ClaudeHarness(fake)
+
+        summary = await h.create_session(**_base_opts, env={"FOO": "bar"})
+        self.assertEqual(len(fake.new_session_calls), 1)
+        call = fake.new_session_calls[0]
+        self.assertEqual(call["env"], {"FOO": "bar"})
+        self.assertEqual(call["command"], "claude")
+        self.assertEqual(
+            call["args"],
+            ["--session-id", summary["id"], "--permission-mode", "acceptEdits", "--model", "opus", "--foo"],
+        )
+        self.assertEqual(call["cwd"], "/tmp")
+        self.assertEqual(call["cols"], 100)
+        self.assertEqual(call["rows"], 30)
+
+        await h.kill(summary["id"])
+
+    async def test_env_omitted_sends_none_not_empty_dict(self):
+        fake = FakeClient(screen=_ready_screen())
+        h = ClaudeHarness(fake)
+
+        summary = await h.create_session(**_base_opts)
+        self.assertEqual(len(fake.new_session_calls), 1)
+        call = fake.new_session_calls[0]
+        self.assertIsNone(call["env"], "env must reach new_session as None, not {} or a missing argument")
+        self.assertEqual(call["command"], "claude")
+        self.assertEqual(
+            call["args"],
+            ["--session-id", summary["id"], "--permission-mode", "acceptEdits", "--model", "opus", "--foo"],
+        )
+        self.assertEqual(call["cwd"], "/tmp")
+        self.assertEqual(call["cols"], 100)
+        self.assertEqual(call["rows"], 30)
+
+        await h.kill(summary["id"])
 
 
 # --- exit watcher ------------------------------------------------------------

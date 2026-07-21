@@ -86,7 +86,7 @@ harness.on("status", (sessionId: string, status: SessionStatus) => { /* ... */ }
 const session = await harness.createSession({
   cwd: "/repo",
   model: "sonnet",          // optional
-  // command, permissionMode, extraArgs, cols, rows
+  // command, permissionMode, extraArgs, env, cols, rows
 });
 
 await harness.sendPrompt(session.id, "first line\nsecond line"); // multi-line, one paste; throws PickerOpenError if a picker is open (see below)
@@ -200,7 +200,7 @@ async def main():
     session = await harness.create_session(
         cwd="/repo",
         model="sonnet",        # optional
-        # command, permission_mode, extra_args, cols, rows
+        # command, permission_mode, extra_args, env, cols, rows
     )
     await harness.send_prompt(session["id"], "first line\nsecond line")  # multi-line, one paste; raises PickerOpenError if a picker is open (see below)
     await harness.interrupt(session["id"])
@@ -365,6 +365,22 @@ and `bypassPermissions` all work (use `extraArgs` for anything else). Auto mode
 needs a recent claude CLI and an eligible model; if it is unavailable claude
 falls back, so confirm it actually engaged.
 
+### Environment for the spawned process
+
+`createSession({ env })` (TS) / `create_session(env=...)` (Python) merges the
+given variables over the daemon's own environment for the spawned `claude`
+process. It exists because some of the CLI's behaviour is only configurable
+through the environment, and the only alternative - setting the variable on
+the daemon process itself - would leak into every other application's
+sessions in the shared namespace, not just the one being created. Omitted
+entirely, `env` is left out of the call to the client rather than sent as an
+empty object or `null`.
+
+For example, an MCP tool call still running after two minutes is
+automatically moved to a background task in an interactive session;
+`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` (passed via `env`) is the kind of thing
+this option is for, if a caller wants a different threshold.
+
 ### Daemon must be restarted after a pupptyeer upgrade
 
 A long-running daemon keeps its old code. After upgrading pupptyeer, restart the
@@ -486,6 +502,6 @@ Environment variables (read by both reference servers):
 
 Programmatic equivalents: TS `ClaudeHarness.create({ socketPath, readiness,
 allowedRoots })` and `createSession({ cwd, command, model, permissionMode,
-extraArgs, cols, rows })`; Python `ClaudeHarness.create(socket_path=...,
+extraArgs, env, cols, rows })`; Python `ClaudeHarness.create(socket_path=...,
 readiness=..., allowed_roots=...)` and `create_session(cwd=..., command=...,
-model=..., permission_mode=..., extra_args=..., cols=..., rows=...)`.
+model=..., permission_mode=..., extra_args=..., env=..., cols=..., rows=...)`.

@@ -40,6 +40,10 @@ const session = await harness.createSession({ cwd: "/repo", model: "sonnet" });
 await harness.sendPrompt(session.id, "first line\nsecond line"); // multi-line, one paste
 ```
 
+`createSession` also takes `command`, `permissionMode`, `extraArgs`, `env`
+(merged over the daemon's own environment for the spawned process), `cols`,
+and `rows`; see USAGE.md for the full option list and why `env` is there.
+
 Also: `harness.list()`, `harness.get(id)`, `harness.transcript(id)`,
 `harness.interrupt(id)`, `harness.kill(id)`, and `harness.blob(sessionId,
 blobId)` (bytes + mediaType for an `image` `ContentPart`, or `undefined` -

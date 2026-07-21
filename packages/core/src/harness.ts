@@ -115,6 +115,14 @@ export interface CreateSessionOptions {
   permissionMode?: string;
   /** Extra argv appended after the managed flags. */
   extraArgs?: string[];
+  /**
+   * Environment for the spawned process, merged by the daemon over its own.
+   * Exposed because some behaviour of the launched CLI is only configurable
+   * through the environment, and the alternative is setting it on the daemon
+   * itself, which would leak into every other app's sessions in the shared
+   * namespace rather than just this one.
+   */
+  env?: Record<string, string>;
   cols?: number;
   rows?: number;
 }
@@ -238,6 +246,7 @@ export class ClaudeHarness extends EventEmitter {
       cwd,
       cols,
       rows,
+      ...(opts.env ? { env: opts.env } : {}),
     });
 
     const blobs = new Map<string, ImageBlob>();
