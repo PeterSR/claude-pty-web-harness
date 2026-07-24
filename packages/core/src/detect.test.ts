@@ -7,6 +7,7 @@ import {
   hasInputPrompt,
   pickerOwnsInput,
   hasStylePicker,
+  hasExitConfirm,
   classifyStartupFailure,
   isHardStartupFailure,
 } from "./detect.js";
@@ -169,6 +170,13 @@ test("hasStylePicker: dark+light option pair only", () => {
   assert.equal(hasStylePicker("choose the text style\n❯ dark mode\n  light mode"), true);
   assert.equal(hasStylePicker("switched to dark mode"), false);
   assert.equal(hasStylePicker("❯ try something"), false);
+});
+
+test("hasExitConfirm: matches the Exit-anyway modal, not the idle footer", () => {
+  assert.equal(hasExitConfirm("Background work is running\n❯ 1. Exit anyway\n  2. Stay"), true);
+  assert.equal(hasExitConfirm("EXIT ANYWAY"), true, "case-insensitive over a raw grid join");
+  assert.equal(hasExitConfirm("⏵⏵ auto mode on · 1 monitor"), false, "the normal footer is not the modal");
+  assert.equal(hasExitConfirm("❯ "), false);
 });
 
 test("classifyStartupFailure: recognizes the interactive block surfaces", () => {

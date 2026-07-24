@@ -19,7 +19,7 @@ All JSON uses camelCase keys. The default route prefix is `/api` (configurable).
 | `GET` | `/api/sessions` | | `SessionSummary[]` |
 | `POST` | `/api/sessions` | `{ cwd, model? }` | `SessionSummary` |
 | `GET` | `/api/sessions/:id` | | `SessionSummary` (404 if unknown) |
-| `DELETE` | `/api/sessions/:id` | | `{ "ok": true }` (kills the session) |
+| `DELETE` | `/api/sessions/:id` | | `{ "ok": true }` (gracefully shuts the session down, falling back to a hard kill) |
 | `POST` | `/api/sessions/:id/prompt` | `{ text }` | `{ "ok": true }` |
 | `GET` | `/api/sessions/:id/blobs/:blobId` | | raw image bytes (404 if unknown) |
 
@@ -41,6 +41,20 @@ either, and the prompt always sends the old unconditional way in that mode
 narrows the window in which a collision can happen, it does not close it: a
 picker that opens in the moment between the capture and the trailing Enter
 still gets confirmed.
+
+`DELETE /api/sessions/:id` does a *graceful* shutdown rather than a bare kill:
+the harness sends claude the two-Ctrl-C quit gesture and, if claude reports it
+still has background work running (the "Background work is running / Exit
+anyway" modal), confirms the quit so that work is torn down instead of being
+orphaned when claude is killed out from under it. It waits a bounded time for
+claude to exit on its own and falls back to a hard kill if it does not, so the
+call always ends with the session gone, but in the worst case (claude wedged,
+or holding background work it will not release) it takes a few seconds longer
+than a bare kill would. The common case - no background work - is fast: the two
+Ctrl-C's exit claude and the call returns as soon as the pty is gone. A server
+started with `READINESS=delay` never reads the screen, so it cannot confirm the
+modal; it still tries the two-Ctrl-C exit and otherwise falls straight through
+to the hard kill.
 
 `GET /api/sessions/:id/blobs/:blobId` serves the bytes behind an `image`
 `ContentPart` (see below): decoded, never-base64 bytes from the harness's

@@ -1,0 +1,7 @@
+{
+  "name": "detect-has-exit-confirm-uppercase",
+  "module": "detect",
+  "fn": "hasExitConfirm",
+  "input": { "text": "EXIT ANYWAY" },
+  "expect": true
+}

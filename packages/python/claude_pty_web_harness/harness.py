@@ -33,6 +33,21 @@ _PICKER_CHECK_TIMEOUT_MS = 1000
 # milliseconds - divided by 1000 at the asyncio.sleep call site below).
 EXIT_WATCH_INTERVAL_MS = 2000
 
+# Graceful-shutdown grace windows. shutdown() sends two Ctrl-C's (the TUI's
+# quit gesture); _SHUTDOWN_CLEAN_EXIT_MS is how long to wait for claude to exit
+# on its own when it has no background work to tear down, and
+# _SHUTDOWN_CONFIRM_EXIT_MS is how long to wait after confirming the "Exit
+# anyway" modal when it does. If either elapses, shutdown() falls back to the
+# hard kill(). Mirrors SHUTDOWN_CLEAN_EXIT_MS/SHUTDOWN_CONFIRM_EXIT_MS in
+# harness.ts (same values in milliseconds).
+_SHUTDOWN_CLEAN_EXIT_MS = 1000
+_SHUTDOWN_CONFIRM_EXIT_MS = 3000
+
+# How often _wait_exit() re-checks list_sessions() while waiting out a graceful
+# quit. Clamped to the remaining budget at each step so a wait never overshoots
+# it. Mirrors WAIT_EXIT_POLL_MS in harness.ts (same value in milliseconds).
+_WAIT_EXIT_POLL_MS = 100
+
 
 def _normalize_root(path: str) -> str:
     return os.path.abspath(os.path.expanduser(path))
@@ -108,6 +123,12 @@ class ClaudeHarness:
         self._sessions: dict[str, _Session] = {}
         self._listeners: List[Listener] = []
         self._exit_watch_task: Optional[asyncio.Task] = None
+        # Graceful-shutdown grace windows, defaulted from the module consts and
+        # kept as attributes only so a test can shrink them instead of waiting
+        # out real seconds; nothing in the public API sets them. Mirrors the
+        # shutdownCleanExitMs/shutdownConfirmExitMs fields in harness.ts.
+        self._shutdown_clean_exit_ms = _SHUTDOWN_CLEAN_EXIT_MS
+        self._shutdown_confirm_exit_ms = _SHUTDOWN_CONFIRM_EXIT_MS
 
     @classmethod
     async def create(
@@ -441,6 +462,96 @@ class ClaudeHarness:
         if not s:
             return
         await asyncio.to_thread(self._client.write_pane, s.pty_id, b"\x03")  # Ctrl-C
+
+    async def shutdown(self, session_id: str) -> None:
+        """Graceful shutdown: quit claude the way a person does, so it tears
+        down its own background work instead of being SIGKILL'd out from under
+        it. A SessionStart plugin can arm a background task, and claude runs
+        those in their own process session (setsid, detached stdin), so neither
+        kill()'s pty Close (SIGHUP to the pty's foreground group) nor its
+        SIGKILL to claude ever reaches them - a monitor that doesn't
+        voluntarily exit when claude goes away would linger. Driving the TUI's
+        own quit path is what makes claude stop that work cleanly.
+
+        Sends Ctrl-C twice (the TUI's quit gesture). If claude has nothing to
+        tear down it exits on the two Ctrl-C's alone; if it does, it shows the
+        "Background work is running / Exit anyway" modal with "Exit anyway"
+        preselected, which this confirms with a single Enter. Either way it
+        waits a bounded time for the pty to actually go, and falls back to the
+        hard kill() if it never does - so a wedged or unrecognized state can't
+        hang teardown.
+
+        In readiness == "delay" mode the daemon's screen capture is avoided
+        entirely (it can wedge claude there, the same reason send_prompt skips
+        its picker check), so the modal can't be read: that mode still gets the
+        two-Ctrl-C clean-exit path but skips the confirm and falls straight
+        through to kill() when background work holds claude open.
+
+        Always ends with the session transitioned to "exited": the graceful
+        paths call _transition_exited directly, the fallback goes through
+        kill(), and every one of those no-ops safely if the exit watcher
+        already transitioned the session across one of the awaits below.
+        Mirrors harness.ts shutdown()."""
+        s = self._sessions.get(session_id)
+        if not s:
+            return
+
+        # Two Ctrl-C's, 150ms apart: the same 0x03 interrupt() writes,
+        # delivered twice, is what the TUI reads as "quit".
+        await asyncio.to_thread(self._client.write_pane, s.pty_id, b"\x03")
+        await asyncio.sleep(0.15)
+        await asyncio.to_thread(self._client.write_pane, s.pty_id, b"\x03")
+
+        # No background work -> claude exits on the two Ctrl-C's alone.
+        if await self._wait_exit(s.pty_id, self._shutdown_clean_exit_ms):
+            await self._transition_exited(s)
+            return
+
+        # Still alive: it may be holding the "Exit anyway" modal. Read the
+        # screen (screen mode only - capture is skipped in delay mode) and, if
+        # the modal is up, confirm it with Enter and wait again for the exit.
+        if self._readiness == "screen":
+            screen = await self._capture_screen(s.pty_id, 200, 1000)
+            if screen and detect.has_exit_confirm("\n".join(screen.lines)):
+                await asyncio.to_thread(self._client.write_pane, s.pty_id, "\r")
+                if await self._wait_exit(s.pty_id, self._shutdown_confirm_exit_ms):
+                    await self._transition_exited(s)
+                    return
+
+        # Wedged, unrecognized, or delay mode with background work still
+        # holding claude open: hard kill. kill() also transitions to "exited".
+        await self.kill(session_id)
+
+    async def _wait_exit(self, pty_id: str, budget_ms: int) -> bool:
+        """Poll list_sessions() until `pty_id` is gone (absent from the list,
+        or listed with alive is False) or `budget_ms` elapses; return whether
+        it exited within the budget. Used only by shutdown() to wait out a
+        graceful quit - the periodic exit watcher (_watch_exits_loop) is what
+        ultimately reports the exit for status purposes, so this is a
+        deliberately bounded local poll, not a subscription.
+
+        A failing list_sessions() is treated as "not exited yet", never as an
+        exit: the same not-evidence-of-death stance _watch_exits_once takes, so
+        a transient daemon-connection error just burns a poll and the graceful
+        wait keeps going (worst case the budget elapses and shutdown falls back
+        to kill()). The poll interval is clamped to the remaining budget so a
+        wait can't overshoot it, and the first check runs before any sleep so
+        an already-dead pty returns at once. Mirrors waitExit in harness.ts."""
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + budget_ms / 1000
+        while True:
+            try:
+                infos = await asyncio.to_thread(self._client.list_sessions)
+                info = next((i for i in infos if i.get("id") == pty_id), None)
+                if info is None or info.get("alive") is False:
+                    return True
+            except Exception:
+                # Absence of information, not evidence of exit; keep waiting.
+                pass
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                return False
+            await asyncio.sleep(min(_WAIT_EXIT_POLL_MS / 1000, remaining))
 
     async def kill(self, session_id: str) -> None:
         s = self._sessions.get(session_id)

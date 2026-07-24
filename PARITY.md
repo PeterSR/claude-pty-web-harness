@@ -50,6 +50,7 @@ Covered by the conformance corpus (module `"detect"`), including the historical 
 | `hasTrustModal(text)` | `has_trust_modal(text)` |
 | `hasStylePicker(text)` | `has_style_picker(text)` |
 | `isReadyFooter(text)` | `is_ready_footer(text)` |
+| `hasExitConfirm(text)` (new) | `has_exit_confirm(text)` (new) |
 | `classifyStartupFailure(text)` | `classify_startup_failure(text)` |
 | `isHardStartupFailure(failure)` | `is_hard_startup_failure(failure)` |
 
@@ -90,6 +91,7 @@ it actually surfaced, by the `sink: "real"` cases `jsonl-real-sink-valid-image` 
 | image blob lookup (new) | `blob(sessionId, blobId): ImageBlob \| undefined` (`{bytes: Buffer, mediaType: string}`) | `blob(session_id, blob_id) -> Optional[Tuple[bytes, str]]` (`(data, media_type)`) - tuple vs. named object is idiomatic, not a wire shape |
 | send a prompt, refusing an open picker (new) | `sendPrompt(id, text, opts?)` - `opts.force` bypasses the guard | `send_prompt(session_id, text, submit=True, force=False)` |
 | interrupt (Ctrl-C) | `interrupt(id)` | `interrupt(session_id)` |
+| graceful shutdown (new) | `shutdown(id)` - two Ctrl-C's, confirm the "Exit anyway" modal with Enter (screen mode only), wait a bounded time, fall back to `kill()` | `shutdown(session_id)` - same shape |
 | kill a session | `kill(id)` (frees `session.blobs` as part of dropping the session) | `kill(session_id)` (frees `s.blobs` as part of popping the session) |
 | chat/status events | `EventEmitter`: `"chat"`, `"status"` | `add_listener(fn)`: `fn(kind, session_id, payload)`, kind `"chat"` \| `"status"` |
 | cwd allowlist rejection | throws `CwdNotAllowedError` (`code: "cwd_not_allowed"`) | raises `PermissionError` |
@@ -99,6 +101,17 @@ The per-session image blob store (new) is an implementation detail behind `blob(
 not a separate capability row: both languages key it by the SHA-256 hex blobId, store decoded
 bytes (never base64), dedupe identical images to one entry, and free it when the session is
 killed (it's just a field on the session object that gets dropped/popped).
+
+`shutdown()` (new) has the same behaviour in both languages: write `0x03` twice 150ms apart (the
+TUI's quit gesture), poll `listSessions`/`list_sessions` for the pty to disappear (a private
+`waitExit`/`_wait_exit` helper that treats a failed poll as "not exited yet", never as an exit,
+the same not-evidence-of-death stance the exit watcher takes), and on the `hasExitConfirm`/
+`has_exit_confirm` modal confirm with a single Enter and wait again, before falling back to
+`kill()`. The two grace windows (`1000`ms after the Ctrl-C's, `3000`ms after the confirm) and the
+`100`ms poll interval are shared module constants in both ports. The screen read is skipped
+entirely in `readiness: "delay"` mode (capture wedges claude there, same as `sendPrompt`'s picker
+check), so that mode gets the clean-exit path but goes straight to the `kill()` fallback when
+background work holds claude open. Every terminal path leaves the session `"exited"`.
 
 ## Server routes (`packages/server/src/index.ts` / `claude_pty_web_harness/server.py`)
 
@@ -120,6 +133,13 @@ The blob route's security rules apply identically in both languages: `blobId` va
 `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`, a single generic 404 for both an
 unknown session and an unknown blob (never distinguishing which), and
 `Cache-Control: public, max-age=31536000, immutable`.
+
+`DELETE {prefix}/sessions/:id` calls `shutdown()`/`shutdown(session_id)`, not
+`kill()`, in both languages: a session close now tears down claude's background
+work through its own quit path rather than orphaning it, falling back to a hard
+kill internally if that wedges. This is bounded but slower than a bare kill in
+the worst case (see PROTOCOL.md); the library's `kill()` is still there for a
+caller that wants an immediate hard stop.
 
 `POST {prefix}/sessions/:id/prompt` maps a `PickerOpenError`/`PickerOpenError`
 (the picker-open guard, see the Harness section above) to 409 identically in

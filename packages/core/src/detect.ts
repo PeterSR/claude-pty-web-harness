@@ -138,6 +138,26 @@ export function isReadyFooter(text: string): boolean {
 }
 
 /**
+ * The "Background work is running / Exit anyway" confirm modal claude shows on
+ * the two-Ctrl-C quit when it still has background work to tear down:
+ *
+ *     Background work is running
+ *     The following will stop when you exit:
+ *     ...
+ *     ❯ 1. Exit anyway
+ *       2. Stay
+ *
+ * "exit anyway" is unique to this modal (the preselected option), so that one
+ * substring is the whole match - grounded in a real capture of the modal, not
+ * reasoned from its likely wording. Lower-cases internally, like
+ * classifyStartupFailure, so a caller can pass a raw grid join. Used by the
+ * harness's graceful shutdown() to know when to confirm the quit with Enter.
+ */
+export function hasExitConfirm(text: string): boolean {
+  return text.toLowerCase().includes("exit anyway");
+}
+
+/**
  * A recognizable interactive failure surface, or null. Ported from claude-p's
  * ClassifyInteractiveFailure: when the input prompt never appears, this reports
  * *why* (an auth wall, a usage limit, an unaccepted trust/permission modal, or

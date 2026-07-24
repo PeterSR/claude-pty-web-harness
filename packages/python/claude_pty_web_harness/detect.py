@@ -138,6 +138,24 @@ def is_ready_footer(text: str) -> bool:
     return "bypass permissions on" in text or "? for shortcuts" in text
 
 
+def has_exit_confirm(text: str) -> bool:
+    """The "Background work is running / Exit anyway" confirm modal claude shows
+    on the two-Ctrl-C quit when it still has background work to tear down:
+
+        Background work is running
+        The following will stop when you exit:
+        ...
+        <prompt> 1. Exit anyway
+          2. Stay
+
+    "exit anyway" is unique to this modal (the preselected option), so that one
+    substring is the whole match - grounded in a real capture of the modal, not
+    reasoned from its likely wording. Lower-cases internally, like
+    classify_startup_failure, so a caller can pass a raw grid join. Used by the
+    harness's graceful shutdown() to know when to confirm the quit with Enter."""
+    return "exit anyway" in text.lower()
+
+
 # Terminal surfaces the harness can never drive past (unlike the trust /
 # tool-approval modals it handles), so seeing one means fail fast.
 _HARD_STARTUP_FAILURES = frozenset(

@@ -175,6 +175,17 @@ class TestHasStylePicker(unittest.TestCase):
         self.assertFalse(detect.has_style_picker("❯ try something"))
 
 
+class TestHasExitConfirm(unittest.TestCase):
+    def test_matches_modal_not_footer(self):
+        self.assertTrue(detect.has_exit_confirm(
+            "Background work is running\n❯ 1. Exit anyway\n  2. Stay"))
+        self.assertTrue(detect.has_exit_confirm("EXIT ANYWAY"),
+                        "case-insensitive over a raw grid join")
+        self.assertFalse(detect.has_exit_confirm("⏵⏵ auto mode on · 1 monitor"),
+                         "the normal footer is not the modal")
+        self.assertFalse(detect.has_exit_confirm("❯ "))
+
+
 class TestClassifyStartupFailure(unittest.TestCase):
     def test_recognizes_interactive_block_surfaces(self):
         self.assertIsNone(detect.classify_startup_failure("Welcome back\n❯ "))

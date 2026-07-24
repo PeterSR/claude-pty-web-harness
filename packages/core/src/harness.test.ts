@@ -21,7 +21,11 @@ import { ClaudeHarness, PickerOpenError } from "./harness.js";
 
 class FakeClient {
   writes: string[] = [];
+  // Ctrl-C's (writeBytes) recorded apart from writePane strings so a shutdown
+  // test can assert exactly which of the two a path wrote.
+  byteWrites: Buffer[] = [];
   captureCalls = 0;
+  killCalls = 0;
   listSessionsCalls = 0;
   /**
    * Scripts what listSessions() resolves (or rejects) to across successive
@@ -44,8 +48,10 @@ class FakeClient {
     this.writes.push(data);
   }
 
-  writeBytes(_ptyId: string, _data: Uint8Array | Buffer): void {
-    // Unused by sendPrompt; present only so a fake stands in for the client shape.
+  writeBytes(_ptyId: string, data: Uint8Array | Buffer): void {
+    // Unused by sendPrompt (which writes via writePane); recorded here for the
+    // shutdown tests, whose Ctrl-C's go out as raw bytes.
+    this.byteWrites.push(Buffer.from(data));
   }
 
   async captureScreen(_ptyId: string, _opts?: { settleMs?: number; timeoutMs?: number }): Promise<Screen> {
@@ -67,9 +73,10 @@ class FakeClient {
   }
 
   async kill(_ptyId: string): Promise<void> {
-    // Unused by the assertions below; present only so createSession's cleanup
-    // kill() call (used to stop the tailer/exit-watch timers this test's
-    // createSession() call started for real) has somewhere to land.
+    // Counted so the shutdown tests can observe the hard-kill fallback; also
+    // where createSession's cleanup kill() (used to stop the tailer/exit-watch
+    // timers those tests started for real) lands.
+    this.killCalls++;
   }
 }
 
@@ -359,4 +366,102 @@ test("watchExits: a session that dies before any poll ever saw it alive is still
   // test against a real daemon that the fakes here had passed.
   assert.deepEqual(events, [["s1", "exited"]]);
   assert.equal(h.get("s1"), undefined);
+});
+
+// --- graceful shutdown -------------------------------------------------------
+//
+// shutdown() is driven directly against the same injected-fake seam. The fake
+// records Ctrl-C's (byteWrites) apart from writePane strings (writes) so a test
+// can assert exactly which of the two a path wrote, counts kill() so the
+// fallback is observable, and scripts listSessions() so waitExit() sees the pty
+// stay or go on cue. Both grace budgets are shrunk to 0ms on the harness so a
+// wait that must time out returns after a single poll instead of burning the
+// real 1s/3s (a 0ms budget = "check once, don't wait", since waitExit polls
+// before it checks the deadline).
+
+/** A settled "Background work is running / Exit anyway" modal frame. */
+function exitConfirmScreen(): Screen {
+  return {
+    cols: 40,
+    rows: 3,
+    lines: ["Background work is running", "❯ 1. Exit anyway", "  2. Stay"],
+    // A real modal hides the input cursor; irrelevant to hasExitConfirm, which
+    // only reads the lines, but faithful to the captured shape.
+    cursor: { row: 0, col: 0, visible: false },
+    altScreen: false,
+  };
+}
+
+/** harnessWithSessions + a pty ("s1" -> "pty-1"), grace budgets shrunk to 0. */
+function shutdownHarness(fake: FakeClient, readiness: "screen" | "delay" = "screen"): ClaudeHarness {
+  const h = harnessWithSessions(fake, { s1: { ptyId: "pty-1" } });
+  (h as any).readiness = readiness;
+  (h as any).shutdownCleanExitMs = 0;
+  (h as any).shutdownConfirmExitMs = 0;
+  return h;
+}
+
+test("shutdown: exits on the two Ctrl-C's alone - no screen read, no hard kill", async () => {
+  const fake = new FakeClient(exitConfirmScreen());
+  fake.listSessionsResults = [[]]; // pty already gone on the first poll
+  const h = shutdownHarness(fake);
+  const events = collectStatusEvents(h);
+
+  await (h as any).shutdown("s1");
+
+  assert.equal(fake.byteWrites.length, 2, "two Ctrl-C's");
+  assert.ok(
+    fake.byteWrites.every((b) => b.length === 1 && b[0] === 0x03),
+    "each Ctrl-C is a single 0x03 byte",
+  );
+  assert.equal(fake.captureCalls, 0, "a clean exit never needs to read the screen");
+  assert.equal(fake.writes.includes("\r"), false, "no Enter written");
+  assert.equal(fake.killCalls, 0, "no hard-kill fallback");
+  assert.deepEqual(events, [["s1", "exited"]]);
+  assert.equal(h.get("s1"), undefined);
+});
+
+test("shutdown: confirms the Exit-anyway modal with Enter, then exits - no hard kill", async () => {
+  const fake = new FakeClient(exitConfirmScreen());
+  // Alive on the post-Ctrl-C poll, gone on the post-Enter poll.
+  fake.listSessionsResults = [[sessionInfo("pty-1", true)], []];
+  const h = shutdownHarness(fake);
+  const events = collectStatusEvents(h);
+
+  await (h as any).shutdown("s1");
+
+  assert.equal(fake.byteWrites.length, 2, "two Ctrl-C's");
+  assert.equal(fake.captureCalls, 1, "read the screen once to see the modal");
+  assert.equal(fake.writes.filter((w) => w === "\r").length, 1, "one Enter to confirm Exit anyway");
+  assert.equal(fake.killCalls, 0, "graceful exit, no hard kill");
+  assert.deepEqual(events, [["s1", "exited"]]);
+});
+
+test("shutdown: falls back to a hard kill when claude never exits", async () => {
+  const fake = new FakeClient(exitConfirmScreen());
+  fake.listSessionsResults = [[sessionInfo("pty-1", true)]]; // steady-state: never exits
+  const h = shutdownHarness(fake);
+  const events = collectStatusEvents(h);
+
+  await (h as any).shutdown("s1");
+
+  assert.equal(fake.byteWrites.length, 2, "two Ctrl-C's");
+  assert.equal(fake.writes.filter((w) => w === "\r").length, 1, "Enter was tried against the modal");
+  assert.equal(fake.killCalls, 1, "hard-kill fallback ran");
+  assert.deepEqual(events, [["s1", "exited"]], "kill still transitions to exited");
+});
+
+test('shutdown: readiness "delay" never reads the screen, falls straight to kill', async () => {
+  const fake = new FakeClient(exitConfirmScreen());
+  fake.listSessionsResults = [[sessionInfo("pty-1", true)]]; // never exits on Ctrl-C alone
+  const h = shutdownHarness(fake, "delay");
+  const events = collectStatusEvents(h);
+
+  await (h as any).shutdown("s1");
+
+  assert.equal(fake.byteWrites.length, 2, "still sends the two Ctrl-C's");
+  assert.equal(fake.captureCalls, 0, "delay mode must never capture the screen");
+  assert.equal(fake.writes.includes("\r"), false, "no modal confirm in delay mode");
+  assert.equal(fake.killCalls, 1, "falls straight through to hard kill");
+  assert.deepEqual(events, [["s1", "exited"]]);
 });

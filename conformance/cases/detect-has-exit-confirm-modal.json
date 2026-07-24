@@ -1,0 +1,7 @@
+{
+  "name": "detect-has-exit-confirm-modal",
+  "module": "detect",
+  "fn": "hasExitConfirm",
+  "input": { "text": "Background work is running\n❯ 1. Exit anyway\n  2. Stay" },
+  "expect": true
+}
