@@ -27,6 +27,8 @@ class FakeClient:
         # single steady-state value/error that holds across as many polls as
         # it drives. Mirrors FakeClient.listSessionsResults in harness.test.ts.
         self.list_sessions_results = [[]]
+        # Counts kill() so the shutdown tests can observe the hard-kill fallback.
+        self.kill_calls = 0
         # Every positional call new_session() received, recorded verbatim.
         self.new_session_calls = []
 
@@ -56,10 +58,10 @@ class FakeClient:
         return f"pty-{len(self.new_session_calls)}"
 
     def kill(self, pty_id) -> None:
-        # Unused by the assertions below; present only so create_session's
-        # cleanup kill() call (used to stop the tailer/exit-watch tasks this
-        # test's create_session() call started for real) has somewhere to land.
-        pass
+        # Counted so the shutdown tests can observe the hard-kill fallback; also
+        # where create_session's cleanup kill() (used to stop the
+        # tailer/exit-watch tasks those tests started for real) lands.
+        self.kill_calls += 1
 
 
 def _empty_screen() -> Screen:
@@ -346,6 +348,90 @@ class TestWatchExits(unittest.IsolatedAsyncioTestCase):
         # fakes here had passed.
         self.assertEqual(events, [("s1", "exited")])
         self.assertIsNone(h.get("s1"))
+
+
+# --- graceful shutdown --------------------------------------------------------
+#
+# shutdown() is driven directly against the same injected-fake seam. The fake's
+# write_pane records both Ctrl-C bytes and the Enter string into `writes` in
+# order, counts kill() so the fallback is observable, and scripts list_sessions
+# so _wait_exit sees the pty stay or go on cue. Both grace budgets are shrunk
+# to 0ms on the harness so a wait that must time out returns after a single
+# poll instead of burning the real 1s/3s (a 0ms budget = "check once, don't
+# wait", since _wait_exit polls before it checks the deadline). Mirrors the
+# "graceful shutdown" tests in harness.test.ts.
+
+def _exit_confirm_screen() -> Screen:
+    """A settled "Background work is running / Exit anyway" modal frame."""
+    return Screen(
+        cols=40, rows=3,
+        lines=["Background work is running", "❯ 1. Exit anyway", "  2. Stay"],
+        cursor=Cursor(0, 0, False), alt_screen=False,
+    )
+
+
+def _shutdown_harness(fake: FakeClient, readiness: str = "screen") -> ClaudeHarness:
+    """_harness_with_sessions + a pty ("s1" -> "pty-1"), grace budgets 0."""
+    h = _harness_with_sessions(fake, {"s1": {"pty_id": "pty-1"}})
+    h._readiness = readiness
+    h._shutdown_clean_exit_ms = 0
+    h._shutdown_confirm_exit_ms = 0
+    return h
+
+
+class TestShutdown(unittest.IsolatedAsyncioTestCase):
+    async def test_exits_on_two_ctrl_c_no_screen_read_no_kill(self):
+        fake = FakeClient(screen=_exit_confirm_screen())
+        fake.list_sessions_results = [[]]  # pty already gone on the first poll
+        h = _shutdown_harness(fake)
+        events = _collect_status_events(h)
+
+        await h.shutdown("s1")
+
+        self.assertEqual(fake.writes, [b"\x03", b"\x03"], "two Ctrl-C's, nothing else")
+        self.assertEqual(fake.capture_calls, 0, "a clean exit never reads the screen")
+        self.assertEqual(fake.kill_calls, 0, "no hard-kill fallback")
+        self.assertEqual(events, [("s1", "exited")])
+        self.assertIsNone(h.get("s1"))
+
+    async def test_confirms_modal_with_enter_then_exits(self):
+        fake = FakeClient(screen=_exit_confirm_screen())
+        # Alive on the post-Ctrl-C poll, gone on the post-Enter poll.
+        fake.list_sessions_results = [[_session_info("pty-1", True)], []]
+        h = _shutdown_harness(fake)
+        events = _collect_status_events(h)
+
+        await h.shutdown("s1")
+
+        self.assertEqual(fake.writes, [b"\x03", b"\x03", "\r"], "two Ctrl-C's then Enter")
+        self.assertEqual(fake.capture_calls, 1, "read the screen once to see the modal")
+        self.assertEqual(fake.kill_calls, 0, "graceful exit, no hard kill")
+        self.assertEqual(events, [("s1", "exited")])
+
+    async def test_falls_back_to_kill_when_never_exits(self):
+        fake = FakeClient(screen=_exit_confirm_screen())
+        fake.list_sessions_results = [[_session_info("pty-1", True)]]  # never exits
+        h = _shutdown_harness(fake)
+        events = _collect_status_events(h)
+
+        await h.shutdown("s1")
+
+        self.assertEqual(fake.writes, [b"\x03", b"\x03", "\r"], "Enter was tried against the modal")
+        self.assertEqual(fake.kill_calls, 1, "hard-kill fallback ran")
+        self.assertEqual(events, [("s1", "exited")], "kill still transitions to exited")
+
+    async def test_delay_mode_never_captures_falls_to_kill(self):
+        fake = FakeClient(screen=_exit_confirm_screen())
+        fake.list_sessions_results = [[_session_info("pty-1", True)]]
+        h = _shutdown_harness(fake, readiness="delay")
+        events = _collect_status_events(h)
+
+        await h.shutdown("s1")
+
+        self.assertEqual(fake.writes, [b"\x03", b"\x03"], "two Ctrl-C's, no modal confirm")
+        self.assertEqual(fake.capture_calls, 0, "delay mode must never capture the screen")
+        self.assertEqual(fake.kill_calls, 1, "falls straight through to hard kill")
+        self.assertEqual(events, [("s1", "exited")])
 
 
 if __name__ == "__main__":

@@ -166,8 +166,12 @@ export async function registerHarnessRoutes(
 
   app.delete(`${prefix}/sessions/:id`, guarded, async (req) => {
     const { id } = req.params as { id: string };
-    await harness.kill(id);
-    // Drop the subscriber set so killed sessions don't leave empty sets behind.
+    // Graceful shutdown, not a bare kill: let claude quit through its own TUI
+    // path (confirming the "Exit anyway" modal) so any background work it armed
+    // is torn down rather than orphaned, falling back to a hard kill() if that
+    // wedges. Bounded, but slower than kill() in the worst case (see PROTOCOL.md).
+    await harness.shutdown(id);
+    // Drop the subscriber set so closed sessions don't leave empty sets behind.
     subscribers.delete(id);
     return { ok: true };
   });

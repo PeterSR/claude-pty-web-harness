@@ -112,7 +112,10 @@ to satisfy it, not the other way around.
   (ASCII-only) check in both languages must not. Also covers a cursor sitting
   plainly on the `❯` prompt, an absent cursor, a not-visible cursor, a
   same-language regression on an ASCII numbered menu, `hasInputPrompt`,
-  `classifyStartupFailure`, `isHardStartupFailure`, and `hasStylePicker`.
+  `classifyStartupFailure`, `isHardStartupFailure`, `hasStylePicker`, and
+  `hasExitConfirm` (the "Exit anyway" graceful-shutdown modal - matched, the
+  idle footer rejected, and the internal lower-casing pinned by an uppercase
+  case).
 
 - **`blob` / the blobId hash**: `hashImageBytes` / `hash_image_bytes` against
   known SHA-256 test vectors (given already-decoded bytes), and

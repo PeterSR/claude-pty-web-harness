@@ -1,0 +1,7 @@
+{
+  "name": "detect-has-exit-confirm-footer",
+  "module": "detect",
+  "fn": "hasExitConfirm",
+  "input": { "text": "⏵⏵ auto mode on · 1 monitor" },
+  "expect": false
+}

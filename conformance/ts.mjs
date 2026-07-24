@@ -15,6 +15,7 @@ import {
   hasInputPrompt,
   pickerOwnsInput,
   hasStylePicker,
+  hasExitConfirm,
   classifyStartupFailure,
   isHardStartupFailure,
 } from "../packages/core/src/detect.ts";
@@ -115,6 +116,8 @@ function run(kase) {
         return isHardStartupFailure(input.failure);
       case "hasStylePicker":
         return hasStylePicker(input.text);
+      case "hasExitConfirm":
+        return hasExitConfirm(input.text);
       default:
         throw new Error(`unknown detect fn: ${fn}`);
     }

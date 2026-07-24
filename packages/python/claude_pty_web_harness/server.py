@@ -155,7 +155,12 @@ def create_router(
 
     @router.delete(f"{prefix}/sessions/{{session_id}}", dependencies=dep)
     async def delete_session(session_id: str):
-        await get_harness().kill(session_id)
+        # Graceful shutdown, not a bare kill: let claude quit through its own
+        # TUI path (confirming the "Exit anyway" modal) so any background work
+        # it armed is torn down rather than orphaned, falling back to a hard
+        # kill() if that wedges. Bounded, but slower than kill() in the worst
+        # case (see PROTOCOL.md). Mirrors the TS server's DELETE route.
+        await get_harness().shutdown(session_id)
         return {"ok": True}
 
     @router.post(f"{prefix}/sessions/{{session_id}}/prompt", dependencies=dep)

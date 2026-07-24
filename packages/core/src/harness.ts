@@ -16,6 +16,7 @@ import {
   hasTrustModal,
   hasStylePicker,
   isReadyFooter,
+  hasExitConfirm,
   classifyStartupFailure,
   isHardStartupFailure,
 } from "./detect.js";
@@ -52,6 +53,24 @@ const PICKER_CHECK_TIMEOUT_MS = 1000;
  * milliseconds - asyncio.sleep there just divides by 1000 at the call site).
  */
 const EXIT_WATCH_INTERVAL_MS = 2000;
+
+/**
+ * Graceful-shutdown grace windows. shutdown() sends two Ctrl-C's (the TUI's
+ * quit gesture); SHUTDOWN_CLEAN_EXIT_MS is how long to wait for claude to exit
+ * on its own when it has no background work to tear down, and
+ * SHUTDOWN_CONFIRM_EXIT_MS is how long to wait after confirming the "Exit
+ * anyway" modal when it does. If either elapses, shutdown() falls back to the
+ * hard kill(). Mirrored in the Python port (same names lower-cased, same ms).
+ */
+const SHUTDOWN_CLEAN_EXIT_MS = 1000;
+const SHUTDOWN_CONFIRM_EXIT_MS = 3000;
+
+/**
+ * How often waitExit() re-checks listSessions() while waiting out a graceful
+ * quit. Clamped to the remaining budget at each step so a wait never overshoots
+ * it. Mirrored in the Python port as WAIT_EXIT_POLL_MS (same value in ms).
+ */
+const WAIT_EXIT_POLL_MS = 100;
 
 /**
  * Thrown by createSession when the requested cwd resolves outside the configured
@@ -167,6 +186,12 @@ export class ClaudeHarness extends EventEmitter {
   // outlasts the interval, the same reentrancy guard JsonlTailer's tick()
   // uses for the same reason.
   private exitWatchInFlight = false;
+  // Graceful-shutdown grace windows, defaulted from the module consts and kept
+  // as fields only so a test can shrink them (via the same cast-based seam the
+  // suite already uses for `client`/`readiness`) instead of waiting out real
+  // seconds; nothing in the public API sets them.
+  private shutdownCleanExitMs = SHUTDOWN_CLEAN_EXIT_MS;
+  private shutdownConfirmExitMs = SHUTDOWN_CONFIRM_EXIT_MS;
 
   static async create(opts: HarnessOptions = {}): Promise<ClaudeHarness> {
     const h = new ClaudeHarness();
@@ -481,6 +506,101 @@ export class ClaudeHarness extends EventEmitter {
     const session = this.sessions.get(id);
     if (!session) return;
     this.client.writeBytes(session.ptyId, Buffer.from([0x03]));
+  }
+
+  /**
+   * Graceful shutdown: quit claude the way a person does, so it tears down its
+   * own background work instead of being SIGKILL'd out from under it. A
+   * SessionStart plugin can arm a background task, and claude runs those in
+   * their own process session (setsid, detached stdin), so neither kill()'s
+   * pty Close (SIGHUP to the pty's foreground group) nor its SIGKILL to claude
+   * ever reaches them - a monitor that doesn't voluntarily exit when claude
+   * goes away would linger. Driving the TUI's own quit path is what makes
+   * claude stop that work cleanly.
+   *
+   * Sends Ctrl-C twice (the TUI's quit gesture). If claude has nothing to tear
+   * down it exits on the two Ctrl-C's alone; if it does, it shows the
+   * "Background work is running / Exit anyway" modal with "Exit anyway"
+   * preselected, which this confirms with a single Enter. Either way it waits a
+   * bounded time for the pty to actually go, and falls back to the hard kill()
+   * if it never does - so a wedged or unrecognized state can't hang teardown.
+   *
+   * In readiness: "delay" mode the daemon's screen capture is avoided entirely
+   * (it can wedge claude there, the same reason sendPrompt skips its picker
+   * check), so the modal can't be read: that mode still gets the two-Ctrl-C
+   * clean-exit path but skips the confirm and falls straight through to kill()
+   * when background work holds claude open.
+   *
+   * Always ends with the session transitioned to "exited": the graceful paths
+   * call transitionExited directly, the fallback goes through kill(), and every
+   * one of those no-ops safely if the exit watcher already transitioned the
+   * session across one of the awaits below.
+   */
+  async shutdown(id: string): Promise<void> {
+    const session = this.sessions.get(id);
+    if (!session) return;
+
+    // Two Ctrl-C's, 150ms apart: the same 0x03 interrupt() writes, delivered
+    // twice, is what the TUI reads as "quit".
+    this.client.writeBytes(session.ptyId, Buffer.from([0x03]));
+    await sleep(150);
+    this.client.writeBytes(session.ptyId, Buffer.from([0x03]));
+
+    // No background work -> claude exits on the two Ctrl-C's alone.
+    if (await this.waitExit(session.ptyId, this.shutdownCleanExitMs)) {
+      this.transitionExited(id, session);
+      return;
+    }
+
+    // Still alive: it may be holding the "Exit anyway" modal. Read the screen
+    // (screen mode only - capture is skipped in delay mode) and, if the modal
+    // is up, confirm it with Enter and wait again for the clean exit.
+    if (this.readiness === "screen") {
+      const screen = await this.captureScreen(session.ptyId, 200, 1000);
+      if (screen && hasExitConfirm(screen.lines.join("\n"))) {
+        this.client.writePane(session.ptyId, "\r");
+        if (await this.waitExit(session.ptyId, this.shutdownConfirmExitMs)) {
+          this.transitionExited(id, session);
+          return;
+        }
+      }
+    }
+
+    // Wedged, unrecognized, or delay mode with background work still holding
+    // claude open: hard kill. kill() also transitions the session to "exited".
+    await this.kill(id);
+  }
+
+  /**
+   * Poll listSessions() until `ptyId` is gone (absent from the list, or listed
+   * with alive === false) or `budgetMs` elapses; return whether it exited
+   * within the budget. Used only by shutdown() to wait out a graceful quit -
+   * the periodic exit watcher (watchExits) is what ultimately reports the exit
+   * for status purposes, so this is a deliberately bounded local poll, not a
+   * subscription.
+   *
+   * A failing listSessions() is treated as "not exited yet", never as an exit:
+   * the same not-evidence-of-death stance watchExits takes, so a transient
+   * daemon-connection error just burns a poll and the graceful wait keeps going
+   * (worst case the budget elapses and shutdown falls back to kill()). The poll
+   * interval is clamped to the remaining budget so a wait can't overshoot it,
+   * and the first check runs before any sleep so an already-dead pty returns at
+   * once.
+   */
+  private async waitExit(ptyId: string, budgetMs: number): Promise<boolean> {
+    const deadline = Date.now() + budgetMs;
+    for (;;) {
+      try {
+        const infos = await this.client.listSessions();
+        const info = infos.find((i) => i.id === ptyId);
+        if (!info || info.alive === false) return true;
+      } catch {
+        // Absence of information, not evidence of exit; keep waiting.
+      }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return false;
+      await sleep(Math.min(WAIT_EXIT_POLL_MS, remaining));
+    }
   }
 
   async kill(id: string): Promise<void> {

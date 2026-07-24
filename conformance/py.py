@@ -13,6 +13,7 @@ import sys
 from claude_pty_web_harness.blob import decode_image, hash_image_bytes
 from claude_pty_web_harness.detect import (
     classify_startup_failure,
+    has_exit_confirm,
     has_input_prompt,
     has_style_picker,
     is_hard_startup_failure,
@@ -98,6 +99,8 @@ def run(kase):
             return is_hard_startup_failure(inp["failure"])
         if fn == "hasStylePicker":
             return has_style_picker(inp["text"])
+        if fn == "hasExitConfirm":
+            return has_exit_confirm(inp["text"])
         raise ValueError(f"unknown detect fn: {fn}")
 
     if mod == "blob":
